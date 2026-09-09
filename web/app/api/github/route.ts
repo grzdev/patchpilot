@@ -1,3 +1,4 @@
+import { screenIssue } from "@/lib/screening";
 import {
   github,
   repoPath,
@@ -41,7 +42,133 @@ export async function GET(request: Request) {
         sample: repos.length,
       });
     }
+    if (action === "projects") {
+      const topicMap: Record<string, string> = {
+        tooling: "developer-tools",
+        frontend: "frontend",
+        ai: "machine-learning",
+        testing: "testing",
+        backend: "database",
+        infra: "devops",
+        fun: "creative-coding",
+      };
+      const category = params.get("category") || "all",
+        language = params.get("language") || "all";
+      const page = Number(params.get("page") || 1);
+      if (!Number.isInteger(page) || page < 1 || page > 5)
+        throw new GitHubError("Choose a search page from 1 to 5.", 400);
+      const phrase = (params.get("query") || "").trim().slice(0, 100);
+      if (language !== "all" && !/^[A-Za-z0-9+# .-]{1,30}$/.test(language))
+        throw new GitHubError("Invalid language filter.", 400);
+      const q = [
+        phrase || "stars:>25",
+        "archived:false",
+        "fork:false",
+        topicMap[category] ? `topic:${topicMap[category]}` : "",
+        language !== "all" ? `language:"${language}"` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const result = await github<{
+        total_count: number;
+        items: {
+          full_name: string;
+          name: string;
+          language: string | null;
+          description: string | null;
+          topics: string[];
+        }[];
+      }>(
+        `/search/repositories?${new URLSearchParams({ q, per_page: "30", page: String(page), sort: "updated" })}`,
+      );
+      return Response.json({
+        projects: result.items.map((item) => ({
+          repo: item.full_name,
+          name: item.name,
+          language: item.language || "Other",
+          description:
+            item.description || "Explore this public GitHub repository.",
+          category:
+            category !== "all"
+              ? category
+              : Object.entries(topicMap).find(([, topic]) =>
+                  item.topics?.includes(topic),
+                )?.[0] || "other",
+          mark: item.name[0].toUpperCase(),
+          color: "#93c5fd",
+        })),
+        more:
+          result.items.length === 30 &&
+          page < 5 &&
+          result.total_count > page * 30,
+      });
+    }
     const repo = repoPath(params.get("repo"));
+    if (action === "shortlist") {
+      const kinds = (params.get("kinds") || "bug")
+        .split(",")
+        .filter((k) =>
+          ["bug", "docs", "test", "feature", "polish"].includes(k),
+        );
+      const pace = params.get("pace") || "quick";
+      const since = new Date(Date.now() - 180 * 86400000)
+        .toISOString()
+        .slice(0, 10);
+      const found = await github<{ items: Issue[] }>(
+        `/search/issues?${new URLSearchParams({ q: `repo:${repo} is:issue is:open no:assignee updated:>=${since}`, sort: "updated", order: "desc", per_page: "60" })}`,
+      );
+      const entries = found.items;
+      const candidates = entries
+        .map((issue) => ({
+          issue,
+          assessment: screenIssue(issue, { kinds, pace }),
+        }))
+        .filter((c) => c.assessment.eligible)
+        .sort((a, b) => b.assessment.score - a.assessment.score)
+        .slice(0, 8);
+      const checks = await Promise.all(
+        candidates.map(async ({ issue, assessment }) => {
+          try {
+            const timeline = await github<Event[]>(
+              `/repos/${repo}/issues/${issue.number}/timeline?per_page=100`,
+            );
+            if (
+              timeline.some(
+                (e) =>
+                  e.source?.issue?.pull_request &&
+                  e.source.issue.state === "open",
+              )
+            )
+              return null;
+            return {
+              ...issue,
+              signals: [
+                ...assessment.signals,
+                "Unassigned; no open linked PR found in the checked timeline.",
+              ],
+              cautions: [
+                ...assessment.cautions,
+                "PR check covers up to 100 timeline events and may miss unlinked work.",
+              ],
+            };
+          } catch {
+            return {
+              ...issue,
+              signals: assessment.signals,
+              cautions: [
+                ...assessment.cautions,
+                "Linked-PR check unavailable. Competition is unknown.",
+              ],
+            };
+          }
+        }),
+      );
+      return Response.json({
+        issues: checks.filter(Boolean),
+        screened: entries.length,
+        fetchedAt: new Date().toISOString(),
+      });
+    }
     if (action === "issues") {
       const [meta, items] = await Promise.all([
         github<{ description: string; stargazers_count: number }>(

@@ -14,19 +14,16 @@ import {
   Search,
   Terminal,
 } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Onboarding } from "@/components/onboarding";
+import { Discovery } from "@/components/discovery";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sidebar, SidebarProvider } from "@/components/ui/sidebar";
-import { Progress } from "@/components/ui/progress";
 import {
-  categories,
-  kinds,
-  initialProfile,
-  rankProjects,
-  rankIssues,
-  type Profile,
-  type Project,
-} from "@/lib/catalog";
+  Sidebar,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+
+import { initialProfile, type Profile, type Project } from "@/lib/catalog";
 import type { Issue } from "@/lib/github";
 type Brief = {
   repo: string;
@@ -51,10 +48,11 @@ export default function Home() {
   const [profile, setProfile] = useState<Profile>(initialProfile),
     [ready, setReady] = useState(false),
     [view, setView] = useState("setup"),
-    [step, setStep] = useState(0),
-    [tab, setTab] = useState("for-you"),
     [project, setProject] = useState<Project | null>(null),
-    [issues, setIssues] = useState<Issue[]>([]),
+    [issues, setIssues] = useState<
+      (Issue & { signals?: string[]; cautions?: string[] })[]
+    >([]),
+    [screened, setScreened] = useState(0),
     [fetched, setFetched] = useState(""),
     [brief, setBrief] = useState<Brief | null>(null),
     [saved, setSaved] = useState<Brief[]>([]),
@@ -65,7 +63,6 @@ export default function Home() {
     [search, setSearch] = useState("");
   const sequence = useRef(0);
   // Browser preferences are restored once after hydration; the server cannot access localStorage.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     try {
       const p = JSON.parse(localStorage.getItem(key) || "null");
@@ -75,8 +72,11 @@ export default function Home() {
         Array.isArray(p.interests) &&
         Array.isArray(p.kinds)
       ) {
+        // Restore browser-only preferences after server hydration.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setProfile({ ...initialProfile, ...p });
-        setView("discover");
+        if (!new URLSearchParams(window.location.search).has("auth"))
+          setView("discover");
       }
       const m = JSON.parse(localStorage.getItem(savedKey) || "[]");
       if (Array.isArray(m))
@@ -97,45 +97,12 @@ export default function Home() {
       );
     }
   }
-  function toggle(field: "skills" | "interests" | "kinds", value: string) {
-    setProfile((p) => ({
-      ...p,
-      [field]: p[field].includes(value)
-        ? p[field].filter((v) => v !== value)
-        : [...p[field], value],
-    }));
-  }
   function navigate(next: string) {
     sequence.current++;
     setBusy("");
     setError("");
     setNotice("");
     setView(next);
-  }
-  async function importProfile() {
-    const seq = ++sequence.current;
-    setBusy("Reading public repositories…");
-    setError("");
-    try {
-      const data = await api<{
-        username: string;
-        languages: string[];
-        sample: number;
-      }>({ action: "profile", username: profile.username });
-      if (seq !== sequence.current) return;
-      setProfile((p) => ({
-        ...p,
-        username: data.username,
-        skills: data.languages,
-      }));
-      setNotice(
-        `Reviewed ${data.sample} recent public repositories. Suggested languages come from non-fork repositories; edit them below.`,
-      );
-    } catch (e) {
-      if (seq === sequence.current) setError((e as Error).message);
-    } finally {
-      if (seq === sequence.current) setBusy("");
-    }
   }
   async function openProject(p: Project) {
     const seq = ++sequence.current;
@@ -146,14 +113,21 @@ export default function Home() {
     setFilter("all");
     setSearch("");
     setError("");
-    setBusy(`Fetching live issues from ${p.name}…`);
+    setBusy(`Screening candidate issues in ${p.name}…`);
     try {
-      const data = await api<{ issues: Issue[]; fetchedAt: string }>({
-        action: "issues",
+      const data = await api<{
+        issues: (Issue & { signals?: string[]; cautions?: string[] })[];
+        fetchedAt: string;
+        screened: number;
+      }>({
+        action: "shortlist",
+        kinds: profile.kinds.join(","),
+        pace: profile.pace,
         repo: p.repo,
       });
       if (seq !== sequence.current) return;
       setIssues(data.issues);
+      setScreened(data.screened);
       setFetched(data.fetchedAt);
     } catch (e) {
       if (seq === sequence.current) setError((e as Error).message);
@@ -197,22 +171,6 @@ export default function Home() {
       setNotice("Saved for this session. Browser storage is unavailable.");
     }
   }
-  const ranked = rankProjects(profile),
-    visible =
-      tab === "explore"
-        ? ranked.filter((p) => !profile.interests.includes(p.category))
-        : ranked;
-  const displayed = rankIssues(issues, profile).filter(
-    (i) =>
-      i.title.toLowerCase().includes(search.toLowerCase()) &&
-      (filter === "all" ||
-        i.labels.some((l) => l.name.toLowerCase().includes(filter))),
-  );
-  const stepTitles = [
-    "Your toolkit. Your starting point.",
-    "Where do you want to go?",
-    "Choose your kind of mission.",
-  ];
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -244,14 +202,20 @@ export default function Home() {
           </span>
         </div>
       </header>
-      <SidebarProvider className="workspace">
+      <SidebarProvider
+        className="workspace"
+        style={{ "--sidebar-width": "222px" } as React.CSSProperties}
+      >
         <Sidebar
-          collapsible="none"
+          collapsible="offcanvas"
           className="rail"
           role="navigation"
           aria-label="Workspace"
         >
-          <div className="rail-label">WORKSPACE</div>
+          <div className="rail-heading">
+            <span className="rail-label">WORKSPACE</span>
+            <SidebarTrigger aria-label="Close sidebar" />
+          </div>
           <button
             className={
               ["discover", "issues", "brief"].includes(view)
@@ -274,7 +238,6 @@ export default function Home() {
             className={view === "setup" ? "nav active" : "nav"}
             onClick={() => {
               navigate("setup");
-              setStep(0);
             }}
           >
             <Settings2 size={19} />
@@ -292,6 +255,10 @@ export default function Home() {
           </div>
         </Sidebar>
         <main id="main">
+          <div className="workspace-controls">
+            <SidebarTrigger aria-label="Open or close sidebar" />
+            <span className="muted small">Workspace</span>
+          </div>
           <div className="breadcrumb">
             WORKSPACE <span>/</span>{" "}
             {view === "setup"
@@ -325,331 +292,20 @@ export default function Home() {
           {!ready ? (
             <p>Opening your workspace…</p>
           ) : view === "setup" ? (
-            <>
-              <div className="setup-heading">
-                <div>
-                  <span className="eyebrow">LET’S FIND YOUR ORBIT</span>
-                  <h1>{stepTitles[step]}</h1>
-                  <p className="intro">
-                    {step === 0
-                      ? "Tell us what you know. We’ll help you find where it matters."
-                      : step === 1
-                        ? "Pick the ecosystems you’re curious about. Familiar or completely new."
-                        : "A quick fix or a deeper challenge. Make it your own."}
-                  </p>
-                </div>
-                <span className="step-counter">
-                  0{step + 1}
-                  <span> / 03</span>
-                </span>
-              </div>
-              <Progress
-                value={((step + 1) / 3) * 100}
-                className="setup-progress"
-              />
-              {step === 0 ? (
-                <>
-                  <section className="github-import">
-                    <div className="import-icon">
-                      <CodeXml size={27} />
-                    </div>
-                    <div>
-                      <h3>Let your GitHub do the introduction</h3>
-                      <p>
-                        Suggest languages from your public repos. No sign-in
-                        needed.
-                      </p>
-                    </div>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        importProfile();
-                      }}
-                    >
-                      <input
-                        aria-label="GitHub username"
-                        placeholder="Your GitHub username"
-                        value={profile.username}
-                        onChange={(e) =>
-                          setProfile({ ...profile, username: e.target.value })
-                        }
-                      />
-                      <button
-                        className="secondary"
-                        disabled={!!busy || !profile.username.trim()}
-                      >
-                        {busy ? (
-                          <LoaderCircle className="spin" size={17} />
-                        ) : (
-                          <ArrowRight size={17} />
-                        )}
-                        Import
-                      </button>
-                    </form>
-                  </section>
-                  <div className="section-title">
-                    <h2>What have you built with?</h2>
-                    <span>Choose all that fit</span>
-                  </div>
-                  <div className="skill-list">
-                    {Array.from(
-                      new Set([
-                        "TypeScript",
-                        "JavaScript",
-                        "Python",
-                        "Go",
-                        "Rust",
-                        "Java",
-                        "C#",
-                        "Ruby",
-                        ...profile.skills,
-                      ]),
-                    ).map((skill) => (
-                      <label
-                        className={
-                          "skill " +
-                          (profile.skills.includes(skill) ? "selected" : "")
-                        }
-                        key={skill}
-                      >
-                        <Checkbox
-                          checked={profile.skills.includes(skill)}
-                          onCheckedChange={() => toggle("skills", skill)}
-                        />
-                        {skill}
-                      </label>
-                    ))}
-                  </div>
-                  <div className="category-grid">
-                    {categories.map((c) => (
-                      <div className="context-card" key={c.id}>
-                        <span className="category-icon">{c.icon}</span>
-                        <h3>{c.name}</h3>
-                        <p>{c.description}</p>
-                        <div className="repo-examples">{c.examples}</div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : step === 1 ? (
-                <>
-                  <div className="category-grid">
-                    {categories.map((c) => (
-                      <label
-                        className={
-                          "choice-card " +
-                          (profile.interests.includes(c.id) ? "selected" : "")
-                        }
-                        key={c.id}
-                      >
-                        <div className="choice-top">
-                          <span className="category-icon">{c.icon}</span>
-                          <Checkbox
-                            checked={profile.interests.includes(c.id)}
-                            onCheckedChange={() => toggle("interests", c.id)}
-                          />
-                        </div>
-                        <h3>{c.name}</h3>
-                        <p>{c.description}</p>
-                        <div className="repo-examples">{c.examples}</div>
-                      </label>
-                    ))}
-                  </div>
-                  <h3 className="mt">Take the familiar path, or explore?</h3>
-                  <Tabs
-                    value={profile.discovery}
-                    onValueChange={(discovery) =>
-                      setProfile({ ...profile, discovery })
-                    }
-                  >
-                    <TabsList>
-                      <TabsTrigger value="familiar">
-                        Build on my skills
-                      </TabsTrigger>
-                      <TabsTrigger value="new">Try something new</TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </>
-              ) : (
-                <>
-                  <div className="category-grid kinds">
-                    {kinds.map((c) => (
-                      <label
-                        className={
-                          "choice-card " +
-                          (profile.kinds.includes(c.id) ? "selected" : "")
-                        }
-                        key={c.id}
-                      >
-                        <div className="choice-top">
-                          <span className="category-icon">{c.icon}</span>
-                          <Checkbox
-                            checked={profile.kinds.includes(c.id)}
-                            onCheckedChange={() => toggle("kinds", c.id)}
-                          />
-                        </div>
-                        <h3>{c.name}</h3>
-                        <p>{c.description}</p>
-                        <div className="repo-examples">{c.examples}</div>
-                      </label>
-                    ))}
-                  </div>
-                  <h2 className="mt">How much room for adventure?</h2>
-                  <Tabs
-                    value={profile.pace}
-                    onValueChange={(pace) => setProfile({ ...profile, pace })}
-                  >
-                    <TabsList className="pace-list">
-                      <TabsTrigger value="quick">
-                        Quick win · 30 min–2 hrs
-                      </TabsTrigger>
-                      <TabsTrigger value="challenge">
-                        Challenge · 2–6 hrs
-                      </TabsTrigger>
-                      <TabsTrigger value="deep">
-                        Deep dive · 1–3 days
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                  <p className="muted small">
-                    Your time budget is saved with your profile. Actual issue
-                    difficulty still needs investigation.
-                  </p>
-                </>
-              )}
-              <footer className="setup-footer">
-                <span className="muted small">
-                  {step === 0
-                    ? "Your suggestions are always editable."
-                    : "You can change these preferences any time."}
-                </span>
-                <div>
-                  {step > 0 && (
-                    <button
-                      className="text-button"
-                      onClick={() => setStep(step - 1)}
-                    >
-                      <ArrowLeft size={16} />
-                      Back
-                    </button>
-                  )}
-                  <button
-                    className="primary"
-                    disabled={
-                      !!busy ||
-                      (step === 0 && !profile.skills.length) ||
-                      (step === 1 && !profile.interests.length) ||
-                      (step === 2 && !profile.kinds.length)
-                    }
-                    onClick={() => {
-                      if (step < 2) setStep(step + 1);
-                      else {
-                        persist(profile);
-                        navigate("discover");
-                      }
-                    }}
-                  >
-                    {step === 2 ? "Find my projects" : "Continue"}
-                    <ArrowRight size={17} />
-                  </button>
-                </div>
-              </footer>
-            </>
+            <Onboarding
+              profile={profile}
+              setProfile={setProfile}
+              onComplete={() => {
+                persist(profile);
+                navigate("discover");
+              }}
+            />
           ) : view === "discover" ? (
-            <>
-              <span className="eyebrow">
-                YOUR NEXT CONTRIBUTION STARTS HERE
-              </span>
-              <h1>
-                Find a project.
-                <br />
-                <span className="subtle">Make your mark.</span>
-              </h1>
-              <p className="intro">
-                Good work starts with the right place to contribute.
-              </p>
-              <div className="profile-strip">
-                <span className="status-dot" />
-                <span>
-                  {profile.skills.length
-                    ? profile.skills.join(" / ")
-                    : "All experience levels"}
-                </span>
-                <span className="separator">·</span>
-                <span>
-                  {profile.pace === "quick"
-                    ? "Quick wins"
-                    : profile.pace === "deep"
-                      ? "Deep dives"
-                      : "Challenges"}
-                </span>
-                <button
-                  onClick={() => {
-                    navigate("setup");
-                    setStep(0);
-                  }}
-                >
-                  Tune your profile <Settings2 size={15} />
-                </button>
-              </div>
-              <Tabs value={tab} onValueChange={setTab}>
-                <TabsList variant="line" className="discover-tabs">
-                  <TabsTrigger value="for-you">For you</TabsTrigger>
-                  <TabsTrigger value="explore">
-                    Explore something new
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <div className="section-title">
-                <h2>
-                  {tab === "explore"
-                    ? "Beyond your usual stack"
-                    : "Your launchpad"}
-                </h2>
-                <span>{visible.length} curated projects</span>
-              </div>
-              <p className="muted small section-note">
-                Ranked by your selected interests and languages. Open a project
-                to load its current GitHub issues.
-              </p>
-              <div className="project-grid">
-                {visible.map((p, index) => (
-                  <article className="project-card" key={p.repo}>
-                    <div className="project-top">
-                      <span
-                        className="project-mark"
-                        style={{ color: p.color, background: p.color + "15" }}
-                      >
-                        {p.mark}
-                      </span>
-                      <span className="language">{p.language}</span>
-                    </div>
-                    <h2>{p.name}</h2>
-                    <span className="repo-name">{p.repo}</span>
-                    <p>{p.description}</p>
-                    <div className="match-reason">
-                      <span>
-                        {index === 0 && tab === "for-you" ? "✳" : "↳"}
-                      </span>
-                      {p.reason}
-                    </div>
-                    <button
-                      className="project-action"
-                      onClick={() => openProject(p)}
-                    >
-                      Explore missions
-                      <ArrowRight size={17} />
-                    </button>
-                  </article>
-                ))}
-              </div>
-              {!visible.length && (
-                <p>
-                  You’ve selected every ecosystem. Switch to For you to explore
-                  the full catalog.
-                </p>
-              )}
-            </>
+            <Discovery
+              profile={profile}
+              openProject={openProject}
+              edit={() => navigate("setup")}
+            />
           ) : view === "issues" ? (
             <>
               <button
@@ -661,7 +317,10 @@ export default function Home() {
               </button>
               <span className="eyebrow">{project?.repo}</span>
               <h1>{project?.name} missions</h1>
-              <p className="intro">A real issue. A useful next step.</p>
+              <p className="intro">
+                Screened for your preferences. Open an investigation before
+                committing your time.
+              </p>
               <div className="issue-controls">
                 <label className="search">
                   <Search size={18} />
@@ -692,40 +351,71 @@ export default function Home() {
                 <>
                   <p className="muted small">
                     {fetched
-                      ? `Fetched ${new Date(fetched).toLocaleString()}. Issues from the 100 most recently updated issue/PR entries; pull requests excluded. Ordered by your preferred work types and beginner labels; labels do not guarantee difficulty.`
+                      ? `Screened ${screened} recent entries. Showing candidates matched to your preferences, with no assignee. Linked-PR results and any failed checks are shown on each card. This is evidence-based screening, not AI code analysis. Checked ${new Date(fetched).toLocaleString()}.`
                       : "Live data has not loaded yet."}
                   </p>
                   <div className="issue-list">
-                    {displayed.map((i) => (
-                      <article className="issue-row" key={i.number}>
-                        <span className="issue-symbol">⊙</span>
-                        <div>
-                          <div className="issue-meta">
-                            #{i.number} · {i.comments} comments ·{" "}
-                            {i.assignees.length ? "Assigned" : "Unassigned"}
+                    {issues
+                      .filter(
+                        (i) =>
+                          i.title
+                            .toLowerCase()
+                            .includes(search.toLowerCase()) &&
+                          (filter === "all" ||
+                            i.labels.some((l) =>
+                              l.name.toLowerCase().includes(filter),
+                            )),
+                      )
+                      .map((i) => (
+                        <article className="issue-row" key={i.number}>
+                          <span className="issue-symbol">⊙</span>
+                          <div>
+                            <div className="issue-meta">
+                              #{i.number} · {i.comments} comments ·{" "}
+                              {i.assignees.length ? "Assigned" : "Unassigned"}
+                            </div>
+                            <h3>{i.title}</h3>
+                            <ul className="candidate-signals">
+                              {i.signals?.map((signal) => (
+                                <li key={signal}>{signal}</li>
+                              ))}
+                            </ul>
+                            <div className="candidate-cautions">
+                              {i.cautions?.map((caution) => (
+                                <p key={caution}>{caution}</p>
+                              ))}
+                            </div>
+                            <div className="labels">
+                              {i.labels.slice(0, 4).map((l) => (
+                                <span key={l.name}>{l.name}</span>
+                              ))}
+                            </div>
                           </div>
-                          <h3>{i.title}</h3>
-                          <div className="labels">
-                            {i.labels.slice(0, 4).map((l) => (
-                              <span key={l.name}>{l.name}</span>
-                            ))}
-                          </div>
-                        </div>
-                        <button
-                          className="secondary"
-                          onClick={() => investigate(i)}
-                        >
-                          Investigate
-                          <ArrowRight size={16} />
-                        </button>
-                      </article>
-                    ))}
+                          <button
+                            className="secondary"
+                            onClick={() => investigate(i)}
+                          >
+                            Investigate
+                            <ArrowRight size={16} />
+                          </button>
+                        </article>
+                      ))}
                   </div>
-                  {fetched && !displayed.length && (
-                    <div className="empty">
-                      No issues match this view. Try another filter or project.
-                    </div>
-                  )}
+                  {fetched &&
+                    !issues.filter(
+                      (i) =>
+                        i.title.toLowerCase().includes(search.toLowerCase()) &&
+                        (filter === "all" ||
+                          i.labels.some((l) =>
+                            l.name.toLowerCase().includes(filter),
+                          )),
+                    ).length && (
+                      <div className="empty">
+                        No promising candidates matched this view. Try another
+                        project or adjust your work preferences; we won’t fill
+                        the shortlist with unrelated issues.
+                      </div>
+                    )}
                 </>
               )}
             </>

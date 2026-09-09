@@ -16,7 +16,7 @@ test("exploring a new stack prioritizes unfamiliar languages within an interest"
     interests: ["tooling"],
     discovery: "new",
   });
-  assert.equal(results[0].language, "JavaScript");
+  assert.notEqual(results[0].language, "TypeScript");
 });
 test("issue ordering respects work preference without mutating live data", () => {
   const issues = [

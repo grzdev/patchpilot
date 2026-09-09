@@ -22,7 +22,7 @@ Open http://localhost:5173. If the Windows npm launcher fails, invoke the instal
 - Evidence briefs with discussion, linked PR checks, contribution-guide links, and retrieval timestamps.
 - Mission briefs saved in localStorage on the same browser and origin.
 
-No AI provider or GitHub OAuth setup is required for this slice. Public API limits apply. Copy `.env.example` to `.env.local` and configure a server-side `GITHUB_TOKEN` for higher limits; never expose tokens in client variables.
+GitHub OAuth is optional; see [SETUP.md](SETUP.md) for sign-in and Anakin configuration. No AI provider is connected yet. Public API limits apply. Copy `.env.example` to `.env.local` and configure a server-side `GITHUB_TOKEN` for higher limits; never expose tokens in client variables.
 
 ## Validation
 
@@ -34,6 +34,8 @@ npm run build
 
 ## Boundaries
 
-The repository catalog is curated, not a live trending ranking. Profile inference inspects up to 100 recent public repositories and counts primary languages of non-forks; it is not a complete contribution history. Issue browsing reads up to 100 issue/PR entries, then removes PRs. Investigation reads the first 100 comments and timeline events. A missing linked PR is not proof that no competing work exists. A contribution guide is located, not analyzed. No source-code reasoning, automated fixes, test execution, or PR publication is implemented yet.
+The repository catalog is curated, not a live trending ranking. Profile inference inspects up to 100 recent public repositories and counts primary languages of non-forks; it is not a complete contribution history. Shortlisting searches up to 60 recent, unassigned issues and checks the highest-ranked eight candidates for open linked PRs. Investigation reads the first 100 comments and timeline events. A missing linked PR is not proof that no competing work exists. A contribution guide is located, not analyzed. No source-code reasoning, automated fixes, test execution, or PR publication is implemented yet.
 
 Next: add a reasoning-provider adapter, source/test retrieval, durable investigation jobs, and an isolated patch execution worker.
+
+The latest iteration adds focused animated onboarding, fun & polish preferences, collapsible navigation, repository filters, and live repository search. Eleven automated tests cover ranking, screening, and OAuth.
