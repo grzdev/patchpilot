@@ -1,13 +1,5 @@
 export const categories = [
   {
-    id: "fun",
-    name: "Fun & delightful UX",
-    description:
-      "Playful tools, creative canvases, and small details that make people smile.",
-    examples: "Excalidraw · tldraw · Penpot · Bubble Tea",
-    icon: "✺",
-  },
-  {
     id: "tooling",
     name: "Developer tools",
     description: "Build tools, package managers, and better workflows.",
@@ -49,16 +41,16 @@ export const categories = [
     examples: "docker/cli · kubernetes/kubernetes",
     icon: "◇",
   },
-];
-export const kinds = [
   {
-    id: "polish",
-    name: "Fun & polish",
+    id: "fun",
+    name: "Fun & delightful UX",
     description:
-      "A little whimsy with real UX value: shortcuts, empty states, motion, and delightful details.",
-    examples: "Excalidraw · Hoppscotch · tldraw",
+      "Playful tools, creative canvases, and small details that make people smile.",
+    examples: "Excalidraw · tldraw · Penpot · Bubble Tea",
     icon: "✺",
   },
+];
+export const kinds = [
   {
     id: "bug",
     name: "Fix a bug",
@@ -86,6 +78,14 @@ export const kinds = [
     description: "Explore a new API, integration, or workflow.",
     examples: "pnpm · Prisma · Ollama",
     icon: "✧",
+  },
+  {
+    id: "polish",
+    name: "Fun & polish",
+    description:
+      "A little whimsy with real UX value: shortcuts, empty states, motion, and delightful details.",
+    examples: "Excalidraw · Hoppscotch · tldraw",
+    icon: "✺",
   },
 ];
 export const projects = [

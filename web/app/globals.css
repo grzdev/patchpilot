@@ -1230,3 +1230,90 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+/* In-flow navigation: the expanded sidebar scrolls with the document. */
+.workspace > .flow-sidebar {
+  position: static;
+  inset: auto;
+  top: auto;
+  height: auto;
+  width: 222px;
+  flex: 0 0 222px;
+  align-self: stretch;
+  flex-direction: column;
+  display: flex;
+  background: #0c1015;
+}
+.flow-sidebar .rail-heading {
+  display: flex;
+}
+.flow-sidebar .rail-label {
+  display: block;
+}
+.flow-sidebar .nav {
+  flex: none;
+  justify-content: flex-start;
+}
+.compact-rail {
+  order: 3;
+  flex: 0 0 58px;
+  width: 58px;
+  align-self: stretch;
+  border-left: 1px solid #28323d;
+  padding: 20px 7px;
+  background: #10161d;
+}
+.compact-rail .rail-heading {
+  justify-content: center;
+  margin-bottom: 18px;
+}
+.compact-rail .nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 42px;
+  min-height: 42px;
+  padding: 10px;
+  margin-bottom: 9px;
+  flex: none;
+}
+.workspace > main {
+  width: auto;
+  min-width: 0;
+}
+@media (max-width: 767px) {
+  .workspace:has(> .flow-sidebar) {
+    flex-wrap: wrap;
+  }
+  .workspace > .flow-sidebar {
+    flex-basis: 100%;
+    width: 100%;
+    border-bottom: 1px solid #28323d;
+    padding: 18px 22px;
+  }
+  .flow-sidebar .rail-bottom {
+    display: none;
+  }
+  .flow-sidebar .nav {
+    font-size: 14px;
+    padding: 12px;
+  }
+  .workspace > .flow-sidebar + main {
+    flex-basis: 100%;
+  }
+  .workspace > main {
+    width: auto;
+  }
+  .compact-rail {
+    flex-basis: 48px;
+    width: 48px;
+    padding: 20px 4px;
+  }
+  .compact-rail .nav {
+    width: 38px;
+  }
+  main:has(+ .compact-rail) {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

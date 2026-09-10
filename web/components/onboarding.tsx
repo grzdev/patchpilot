@@ -44,6 +44,7 @@ export function Onboarding({
     [connected, setConnected] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const oauthOutcome = useRef<string | null>(null);
   useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
@@ -56,6 +57,7 @@ export function Onboarding({
   useEffect(() => {
     let active = true;
     const query = new URLSearchParams(window.location.search);
+    if (query.has("auth")) oauthOutcome.current = query.get("auth");
     fetch("/api/auth/github/session")
       .then((r) => r.json())
       .then((data: unknown) => {
@@ -64,10 +66,11 @@ export function Onboarding({
         };
         if (active && result.profile) {
           setConnected(result.profile.username);
+          if (oauthOutcome.current === "connected") setStep(1);
           setNote(
-            "GitHub account verified. Continue to review your suggested languages.",
+            "GitHub account verified. These language suggestions come from your public repositories; keep the ones that fit.",
           );
-          if (query.get("auth") === "connected" || !profile.skills.length)
+          if (oauthOutcome.current === "connected" || !profile.skills.length)
             setProfile({
               ...profile,
               username: result.profile.username,
@@ -242,35 +245,43 @@ export function Onboarding({
             )}
           </div>
         ) : step === 1 ? (
-          <div className="skill-list large-skills">
-            {Array.from(
-              new Set([
-                "TypeScript",
-                "JavaScript",
-                "Python",
-                "Go",
-                "Rust",
-                "Java",
-                "C#",
-                "Ruby",
-                "HTML",
-                "CSS",
-                ...profile.skills,
-              ]),
-            ).map((skill) => (
-              <label
-                key={skill}
-                className={
-                  "skill " + (profile.skills.includes(skill) ? "selected" : "")
-                }
-              >
-                <Checkbox
-                  checked={profile.skills.includes(skill)}
-                  onCheckedChange={() => toggle("skills", skill)}
-                />
-                {skill}
-              </label>
-            ))}
+          <div>
+            <p className="muted small" role="status">
+              {connected
+                ? `Recommended from ${connected}’s public GitHub profile. Review the selected languages below.`
+                : "Select the languages you’re comfortable working with."}
+            </p>
+            <div className="skill-list large-skills">
+              {Array.from(
+                new Set([
+                  "TypeScript",
+                  "JavaScript",
+                  "Python",
+                  "Go",
+                  "Rust",
+                  "Java",
+                  "C#",
+                  "Ruby",
+                  "HTML",
+                  "CSS",
+                  ...profile.skills,
+                ]),
+              ).map((skill) => (
+                <label
+                  key={skill}
+                  className={
+                    "skill " +
+                    (profile.skills.includes(skill) ? "selected" : "")
+                  }
+                >
+                  <Checkbox
+                    checked={profile.skills.includes(skill)}
+                    onCheckedChange={() => toggle("skills", skill)}
+                  />
+                  {skill}
+                </label>
+              ))}
+            </div>
           </div>
         ) : step === 2 || step === 3 ? (
           <div className="category-grid">
@@ -409,3 +420,4 @@ export function Onboarding({
     </section>
   );
 }
+

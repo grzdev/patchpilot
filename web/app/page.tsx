@@ -3,25 +3,20 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   ArrowLeft,
-  Compass,
   GitBranch,
   CodeXml,
   Bookmark,
   ExternalLink,
   LoaderCircle,
   Check,
-  Settings2,
   Search,
   Terminal,
 } from "lucide-react";
+import { WorkspaceNavigation } from "@/components/workspace-navigation";
 import { Onboarding } from "@/components/onboarding";
 import { Discovery } from "@/components/discovery";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Sidebar,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 import { initialProfile, type Profile, type Project } from "@/lib/catalog";
 import type { Issue } from "@/lib/github";
@@ -206,54 +201,11 @@ export default function Home() {
         className="workspace"
         style={{ "--sidebar-width": "222px" } as React.CSSProperties}
       >
-        <Sidebar
-          collapsible="offcanvas"
-          className="rail"
-          role="navigation"
-          aria-label="Workspace"
-        >
-          <div className="rail-heading">
-            <span className="rail-label">WORKSPACE</span>
-            <SidebarTrigger aria-label="Close sidebar" />
-          </div>
-          <button
-            className={
-              ["discover", "issues", "brief"].includes(view)
-                ? "nav active"
-                : "nav"
-            }
-            onClick={() => navigate("discover")}
-          >
-            <Compass size={19} />
-            Discover
-          </button>
-          <button
-            className={view === "saved" ? "nav active" : "nav"}
-            onClick={() => navigate("saved")}
-          >
-            <Bookmark size={19} />
-            My missions<span className="count">{saved.length}</span>
-          </button>
-          <button
-            className={view === "setup" ? "nav active" : "nav"}
-            onClick={() => {
-              navigate("setup");
-            }}
-          >
-            <Settings2 size={19} />
-            Your profile
-          </button>
-          <div className="rail-bottom">
-            <span className="mini-code">&gt;_</span>
-            <strong>
-              Small patches.
-              <br />
-              Real impact.
-            </strong>
-            <p>Your next contribution starts with a little curiosity.</p>
-            <span className="version">PATCHPILOT / v0.1</span>
-          </div>
-        </Sidebar>
+        <WorkspaceNavigation
+          view={view}
+          count={saved.length}
+          navigate={navigate}
+        />
         <main id="main">
           <div className="workspace-controls">
             <SidebarTrigger aria-label="Open or close sidebar" />
@@ -618,6 +570,12 @@ export default function Home() {
             </>
           )}
         </main>
+        <WorkspaceNavigation
+          compact
+          view={view}
+          count={saved.length}
+          navigate={navigate}
+        />
       </SidebarProvider>
     </div>
   );
