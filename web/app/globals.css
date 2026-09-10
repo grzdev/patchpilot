@@ -1255,11 +1255,11 @@ input::placeholder {
   justify-content: flex-start;
 }
 .compact-rail {
-  order: 3;
+  order: 0;
   flex: 0 0 58px;
   width: 58px;
   align-self: stretch;
-  border-left: 1px solid #28323d;
+  border-right: 1px solid #28323d;
   padding: 20px 7px;
   background: #10161d;
 }
@@ -1312,8 +1312,9 @@ input::placeholder {
   .compact-rail .nav {
     width: 38px;
   }
-  main:has(+ .compact-rail) {
+  .compact-rail + main {
     padding-left: 16px;
     padding-right: 16px;
   }
 }
+

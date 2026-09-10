@@ -206,6 +206,12 @@ export default function Home() {
           count={saved.length}
           navigate={navigate}
         />
+        <WorkspaceNavigation
+          compact
+          view={view}
+          count={saved.length}
+          navigate={navigate}
+        />
         <main id="main">
           <div className="workspace-controls">
             <SidebarTrigger aria-label="Open or close sidebar" />
@@ -570,13 +576,8 @@ export default function Home() {
             </>
           )}
         </main>
-        <WorkspaceNavigation
-          compact
-          view={view}
-          count={saved.length}
-          navigate={navigate}
-        />
       </SidebarProvider>
     </div>
   );
 }
+
