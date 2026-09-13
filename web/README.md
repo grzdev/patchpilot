@@ -1,41 +1,49 @@
-# PatchPilot web app
+# PatchPilot Web App
 
-React + TypeScript, running on the Vinext / Cloudflare Workers starter.
+The web frontend and API runtime for PatchPilot, built with React 19, TypeScript, Next.js, and Vinext.
 
-## Run locally
+For the full product overview, architecture diagram, feature guide, and screenshots, see the [Root README](../README.md).
 
-Requires Node.js 22.13+ (Node 24 recommended).
+---
+
+## 🏃 Local Development
 
 ```sh
+# Install dependencies
 npm run install:ci
+
+# Start development server on port 5173
 npm run dev
-```
 
-Open http://localhost:5173. If the Windows npm launcher fails, invoke the installed npm-cli.js with Node directly.
-
-## Available today
-
-- Manual onboarding or public GitHub username import; suggested languages are editable.
-- Repository examples on profile cards, with saved preferences in browser storage.
-- Curated project recommendations ranked by interests and languages.
-- Live GitHub issue browsing, search, labels, and preference-based ordering.
-- Evidence briefs with discussion, linked PR checks, contribution-guide links, and retrieval timestamps.
-- Mission briefs saved in localStorage on the same browser and origin.
-
-GitHub OAuth is optional; see [SETUP.md](SETUP.md) for sign-in and Anakin configuration. No AI provider is connected yet. Public API limits apply. Copy `.env.example` to `.env.local` and configure a server-side `GITHUB_TOKEN` for higher limits; never expose tokens in client variables.
-
-## Validation
-
-```sh
+# Run automated tests (40 tests passing)
 npm test
-npx tsc --noEmit
+
+# Build production bundle
 npm run build
 ```
 
-## Boundaries
+---
 
-The repository catalog is curated, not a live trending ranking. Profile inference inspects up to 100 recent public repositories and counts primary languages of non-forks; it is not a complete contribution history. Shortlisting searches up to 60 recent, unassigned issues and checks the highest-ranked eight candidates for open linked PRs. Investigation reads the first 100 comments and timeline events. A missing linked PR is not proof that no competing work exists. A contribution guide is located, not analyzed. No source-code reasoning, automated fixes, test execution, or PR publication is implemented yet.
+## 🔑 Environment Configuration
 
-Next: add a reasoning-provider adapter, source/test retrieval, durable investigation jobs, and an isolated patch execution worker.
+Create `web/.env.local` for local development. Never commit `.env` or `.env.local` files.
 
-The latest iteration adds focused animated onboarding, fun & polish preferences, collapsible navigation, repository filters, and live repository search. Eleven automated tests cover ranking, screening, and OAuth.
+```dotenv
+# Required for source code analysis
+GROQ_API_KEY=your_groq_api_key
+
+# Required for GitHub sign-in (OAuth with PKCE)
+GITHUB_CLIENT_ID=your_oauth_app_client_id
+GITHUB_CLIENT_SECRET=your_oauth_app_client_secret
+AUTH_SESSION_SECRET=a_random_string_of_at_least_32_characters
+GITHUB_CALLBACK_URL=http://localhost:5173/api/auth/github/callback
+
+# Recommended: higher rate limit for GitHub API requests
+GITHUB_TOKEN=your_personal_access_token
+
+# Optional: research documentation and review fallback
+ANAKIN_API_KEY=your_anakin_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+```
+
+See [SETUP.md](SETUP.md) for detailed GitHub OAuth App and Anakin setup instructions.

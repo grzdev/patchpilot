@@ -28,10 +28,12 @@ import {
 } from "@/lib/catalog";
 export function Discovery({
   profile,
+  profiled = false,
   openProject,
   edit,
 }: {
   profile: Profile;
+  profiled?: boolean;
   openProject: (p: Project) => void;
   edit: () => void;
 }) {
@@ -45,7 +47,7 @@ export function Discovery({
     [page, setPage] = useState(1),
     [more, setMore] = useState(false),
     [searched, setSearched] = useState(false);
-  const pool = [
+  const pool = searched ? extra : [
     ...projects,
     ...extra.filter((p) => !projects.some((c) => c.repo === p.repo)),
   ];
@@ -82,8 +84,10 @@ export function Discovery({
         error?: string;
         projects: Project[];
         more: boolean;
+        exact?: boolean;
       };
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error || "GitHub lookup failed. Please try again.");
+      if(data.exact && data.projects[0]) {openProject(data.projects[0]);return;}
       setExtra((current) =>
         next === 1
           ? data.projects
@@ -106,26 +110,13 @@ export function Discovery({
   }
   return (
     <>
-      <span className="eyebrow">YOUR CONTRIBUTION SHORTLIST</span>
-      <h1>
-        A little more you.
-        <br />
-        <span className="subtle">A lot to explore.</span>
-      </h1>
-      <p className="intro">
-        Choose a project. PatchPilot will screen its issues for promising
-        starting points.
-      </p>
-      <div className="profile-strip">
-        <span>{profile.skills.join(" / ") || "All languages"}</span>
-        <span>·</span>
-        <span>
-          {profile.kinds.includes("polish")
-            ? "Fun, polish & delightful UX"
-            : profile.kinds.join(" + ")}
-        </span>
-        <button onClick={edit}>Edit preferences</button>
-      </div>
+      {profiled ? <header className="personal-discovery-heading">
+        <div><span className="eyebrow">YOUR WORKSPACE</span><h1>Find your next contribution.</h1>
+        <p>Explore projects matched to your interests, or bring a repository of your own.</p></div>
+        <button className="secondary" onClick={edit}>Edit preferences</button>
+      </header> : <><span className="eyebrow">REPOSITORY INVESTIGATION</span>
+      <h1>Bring a repo. Find a useful fix.</h1>
+      <p className="intro">Paste a public GitHub repository to investigate its source code for repair opportunities.</p></>}
       <Collapsible>
         <div className="discovery-toolbar">
           <form
@@ -143,15 +134,15 @@ export function Discovery({
                   setQuery(e.target.value);
                   setSearched(false);
                 }}
-                aria-label="Search repositories"
-                placeholder="Try drawing, terminal, games, or a repo name…"
+                aria-label="GitHub repository URL, owner/repository, or discovery keywords"
+                placeholder="https://github.com/grzdev/portfolio or owner/repository"
               />
             </label>
-            <button className="secondary" disabled={busy}>
+            <button className="primary" disabled={busy || !query.trim()}>
               {busy ? (
                 <LoaderCircle size={16} className="spin" />
               ) : (
-                "Search GitHub"
+                "Find repository"
               )}
             </button>
           </form>
@@ -230,17 +221,18 @@ export function Discovery({
           {error}
         </p>
       )}
+      {!profiled && <p className="discovery-help muted small">Paste a repository link to open its scan setup, or search by keyword.</p>}
       <div className="section-title">
         <h2>
-          {personal ? "Picked for your interests" : "Explore the possibilities"}
+          {searched ? "GitHub search results" : profiled ? "Projects for you" : "Need a starting point?"}
         </h2>
         <span>{visible.length} projects</span>
       </div>
       <p className="muted small">
         {searched
-          ? "Live GitHub search results added to your catalog."
-          : "A broad starting catalog, filtered by your choices. Search GitHub for more."}{" "}
-        Issue screening happens when you open a project.
+          ? "Repositories matching your GitHub search."
+          : "Optional suggestions based on your preferences. Any public repository can be submitted above."}{" "}
+
       </p>
       <div className="project-grid">
         {visible.map((p) => (
@@ -254,12 +246,12 @@ export function Discovery({
               </span>
               <span className="language">{p.language}</span>
             </div>
-            <h2>{p.name}</h2>
+            <h2><a className="project-name-button" href={`https://github.com/${p.repo}`} target="_blank" rel="noreferrer" aria-label={`About ${p.name} on GitHub (opens a new tab)`}>{p.name}<ArrowRight size={17}/></a></h2>
             <span className="repo-name">{p.repo}</span>
             <p>{p.description}</p>
-            <div className="match-reason">{p.reason}</div>
+            <details className="project-fit"><summary>Why this project?</summary><p>{p.reason}</p></details>
             <button className="project-action" onClick={() => openProject(p)}>
-              Find promising issues
+              Choose repository
               <ArrowRight size={17} />
             </button>
           </article>

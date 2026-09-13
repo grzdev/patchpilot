@@ -1,170 +1,65 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import {
-  ArrowRight,
-  ArrowLeft,
-  GitBranch,
-  CodeXml,
-  Bookmark,
-  ExternalLink,
-  LoaderCircle,
-  Check,
-  Search,
-  Terminal,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { GitBranch, CodeXml } from "lucide-react";
 import { WorkspaceNavigation } from "@/components/workspace-navigation";
 import { Onboarding } from "@/components/onboarding";
 import { Discovery } from "@/components/discovery";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-
-import { initialProfile, type Profile, type Project } from "@/lib/catalog";
-import type { Issue } from "@/lib/github";
-type Brief = {
-  repo: string;
-  issue: Issue;
-  linked: { title: string; url: string; state: string }[];
-  guide: string | null;
-  evidence: { label: string; url: string; detail: string }[];
-  warnings: string[];
-  comments: { body: string; url: string; author: string }[];
-  fetchedAt: string;
-  competition: string;
-};
-const key = "patchpilot.profile.v1",
-  savedKey = "patchpilot.missions.v1";
-async function api<T>(query: Record<string, string>): Promise<T> {
-  const res = await fetch("/api/github?" + new URLSearchParams(query));
-  const data = (await res.json()) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error || "Request failed.");
-  return data;
-}
+import { SourceScan, ScanResults } from "@/components/source-scan";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { initialProfile, projects, type Profile, type Project } from "@/lib/catalog";
+import type { Scan } from "@/lib/scan-types";
+const key = "patchpilot.profile.v1", savedKey = "patchpilot.scans.v1";
 export default function Home() {
-  const [profile, setProfile] = useState<Profile>(initialProfile),
-    [ready, setReady] = useState(false),
-    [view, setView] = useState("setup"),
-    [project, setProject] = useState<Project | null>(null),
-    [issues, setIssues] = useState<
-      (Issue & { signals?: string[]; cautions?: string[] })[]
-    >([]),
-    [screened, setScreened] = useState(0),
-    [fetched, setFetched] = useState(""),
-    [brief, setBrief] = useState<Brief | null>(null),
-    [saved, setSaved] = useState<Brief[]>([]),
-    [busy, setBusy] = useState(""),
-    [error, setError] = useState(""),
-    [notice, setNotice] = useState(""),
-    [filter, setFilter] = useState("all"),
-    [search, setSearch] = useState("");
-  const sequence = useRef(0);
-  // Browser preferences are restored once after hydration; the server cannot access localStorage.
-  useEffect(() => {
+  const [profile,setProfile] = useState<Profile>(initialProfile), [ready,setReady] = useState(false),
+    [disconnecting,setDisconnecting] = useState(false), [profiled,setProfiled] = useState(false), [view,setView] = useState("discover"), [project,setProject] = useState<Project|null>(null),
+    [saved,setSaved] = useState<Scan[]>([]), [opened,setOpened] = useState<Scan|null>(null), [notice,setNotice] = useState("");
+  useEffect(()=> {
+    const params = new URLSearchParams(window.location.search);
+    if(params.has("auth")) setView("setup");
+    const repoParam = params.get("repo");
+    if(repoParam) {
+      const match = projects.find(p => p.repo.toLowerCase() === repoParam.toLowerCase());
+      if(match) { setProject(match); setView("issues"); }
+      else {
+        const parts = repoParam.split("/");
+        const name = parts[1] || parts[0];
+        setProject({ repo: repoParam, name, language: "TypeScript", description: "Repository investigation", category: "other", mark: name[0]?.toUpperCase() || "R", color: "#93c5fd" });
+        setView("issues");
+      }
+    }
     try {
       const p = JSON.parse(localStorage.getItem(key) || "null");
-      if (
-        p &&
-        Array.isArray(p.skills) &&
-        Array.isArray(p.interests) &&
-        Array.isArray(p.kinds)
-      ) {
-        // Restore browser-only preferences after server hydration.
+      if (p && Array.isArray(p.skills) && Array.isArray(p.kinds) && Array.isArray(p.interests)) {
+        // Restore preferences from browser storage after hydration.
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setProfile({ ...initialProfile, ...p });
-        if (!new URLSearchParams(window.location.search).has("auth"))
-          setView("discover");
+        setProfile({...initialProfile,...p});setProfiled(true);
+        if (!params.has("auth") && !repoParam) setView("discover");
       }
-      const m = JSON.parse(localStorage.getItem(savedKey) || "[]");
-      if (Array.isArray(m))
-        setSaved(
-          m.filter(
-            (b) => b?.issue?.number && b?.repo && Array.isArray(b?.evidence),
-          ),
-        );
+      const scans = JSON.parse(localStorage.getItem(savedKey) || "[]");
+      if (Array.isArray(scans)) setSaved(scans.filter(s=>s?.repo && s?.commit && Array.isArray(s.files) && Array.isArray(s.findings) && Array.isArray(s.warnings) && Array.isArray(s.research)));
     } catch {}
     setReady(true);
-  }, []);
-  function persist(p: Profile) {
+  },[]);
+  useEffect(()=>{window.scrollTo({top:0,behavior:"instant"});document.getElementById("main")?.scrollTo({top:0,behavior:"instant"});},[view,project,opened]);
+  useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(""),5000);return()=>clearTimeout(timer);},[notice]);
+  async function disconnect() {
+    setDisconnecting(true);
     try {
-      localStorage.setItem(key, JSON.stringify(p));
-    } catch {
-      setNotice(
-        "Your browser could not save preferences. They will last for this session.",
-      );
-    }
+      const response=await fetch("/api/auth/github/session",{method:"DELETE"});
+      if(!response.ok)throw new Error("Could not disconnect. Please retry.");
+      setProfile(initialProfile);setProfiled(false);
+      try {localStorage.removeItem(key);} catch {}
+      window.history.replaceState({},"",window.location.pathname);
+      setView("discover");setNotice("GitHub profile removed. Open Your profile to connect another account.");
+    } catch(error) {setNotice((error as Error).message);} finally {setDisconnecting(false);}
   }
-  function navigate(next: string) {
-    sequence.current++;
-    setBusy("");
-    setError("");
-    setNotice("");
-    setView(next);
-  }
-  async function openProject(p: Project) {
-    const seq = ++sequence.current;
-    setProject(p);
-    setView("issues");
-    setIssues([]);
-    setFetched("");
-    setFilter("all");
-    setSearch("");
-    setError("");
-    setBusy(`Screening candidate issues in ${p.name}…`);
-    try {
-      const data = await api<{
-        issues: (Issue & { signals?: string[]; cautions?: string[] })[];
-        fetchedAt: string;
-        screened: number;
-      }>({
-        action: "shortlist",
-        kinds: profile.kinds.join(","),
-        pace: profile.pace,
-        repo: p.repo,
-      });
-      if (seq !== sequence.current) return;
-      setIssues(data.issues);
-      setScreened(data.screened);
-      setFetched(data.fetchedAt);
-    } catch (e) {
-      if (seq === sequence.current) setError((e as Error).message);
-    } finally {
-      if (seq === sequence.current) setBusy("");
-    }
-  }
-  async function investigate(issue: Issue) {
-    if (!project) return;
-    const seq = ++sequence.current;
-    setView("brief");
-    setBrief(null);
-    setError("");
-    setBusy("Reading issue, discussion, timeline, and contribution metadata…");
-    try {
-      const data = await api<Brief>({
-        action: "brief",
-        repo: project.repo,
-        number: String(issue.number),
-      });
-      if (seq === sequence.current) setBrief(data);
-    } catch (e) {
-      if (seq === sequence.current) setError((e as Error).message);
-    } finally {
-      if (seq === sequence.current) setBusy("");
-    }
-  }
-  function saveBrief() {
-    if (!brief) return;
-    const updated = [
-      brief,
-      ...saved.filter(
-        (b) => b.repo !== brief.repo || b.issue.number !== brief.issue.number,
-      ),
-    ];
-    setSaved(updated);
-    try {
-      localStorage.setItem(savedKey, JSON.stringify(updated));
-      setNotice("Mission saved to this browser.");
-    } catch {
-      setNotice("Saved for this session. Browser storage is unavailable.");
-    }
+  function navigate(next:string) {setNotice("");setOpened(null);setView(next);}
+  function openProject(p:Project) {setProject(p);navigate("issues");}
+  function save(scan:Scan) {
+    const next = [scan,...saved.filter(s=>s.repo!==scan.repo || s.commit!==scan.commit || s.scannedAt!==scan.scannedAt)].slice(0,20);
+    setSaved(next);
+    try {localStorage.setItem(savedKey,JSON.stringify(next));setNotice("Added to My missions.");}
+    catch {setNotice("Saved for this session. Browser storage is unavailable.");}
   }
   return (
     <div className="app-shell">
@@ -172,7 +67,7 @@ export default function Home() {
         <button
           className="brand"
           onClick={() =>
-            navigate(ready && view !== "setup" ? "discover" : "setup")
+            navigate("discover")
           }
         >
           <span className="brand-icon">
@@ -213,371 +108,10 @@ export default function Home() {
           navigate={navigate}
         />
         <main id="main">
-          <div className="workspace-controls">
-            <SidebarTrigger aria-label="Open or close sidebar" />
-            <span className="muted small">Workspace</span>
-          </div>
-          <div className="breadcrumb">
-            WORKSPACE <span>/</span>{" "}
-            {view === "setup"
-              ? "YOUR PROFILE"
-              : view === "saved"
-                ? "MY MISSIONS"
-                : view === "brief"
-                  ? "MISSION BRIEF"
-                  : view === "issues"
-                    ? "PROJECT MISSIONS"
-                    : "DISCOVER"}
-          </div>
-          {error && (
-            <div className="message error" role="alert">
-              {error}
-              {view === "issues" && project && (
-                <button onClick={() => openProject(project)}>Retry</button>
-              )}
-              {view === "brief" && (
-                <button onClick={() => navigate("issues")}>
-                  Back to issues
-                </button>
-              )}
-            </div>
-          )}
-          {notice && (
-            <div className="message" role="status">
-              {notice}
-            </div>
-          )}
-          {!ready ? (
-            <p>Opening your workspace…</p>
-          ) : view === "setup" ? (
-            <Onboarding
-              profile={profile}
-              setProfile={setProfile}
-              onComplete={() => {
-                persist(profile);
-                navigate("discover");
-              }}
-            />
-          ) : view === "discover" ? (
-            <Discovery
-              profile={profile}
-              openProject={openProject}
-              edit={() => navigate("setup")}
-            />
-          ) : view === "issues" ? (
-            <>
-              <button
-                className="back-link"
-                onClick={() => navigate("discover")}
-              >
-                <ArrowLeft size={16} />
-                All projects
-              </button>
-              <span className="eyebrow">{project?.repo}</span>
-              <h1>{project?.name} missions</h1>
-              <p className="intro">
-                Screened for your preferences. Open an investigation before
-                committing your time.
-              </p>
-              <div className="issue-controls">
-                <label className="search">
-                  <Search size={18} />
-                  <input
-                    aria-label="Search loaded issues"
-                    placeholder="Search loaded issues…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </label>
-                <Tabs value={filter} onValueChange={setFilter}>
-                  <TabsList>
-                    <TabsTrigger value="all">All</TabsTrigger>
-                    <TabsTrigger value="good first issue">
-                      Good first issue
-                    </TabsTrigger>
-                    <TabsTrigger value="bug">Bugs</TabsTrigger>
-                    <TabsTrigger value="documentation">Docs</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
-              {busy ? (
-                <div className="loading">
-                  <LoaderCircle className="spin" />
-                  {busy}
-                </div>
-              ) : (
-                <>
-                  <p className="muted small">
-                    {fetched
-                      ? `Screened ${screened} recent entries. Showing candidates matched to your preferences, with no assignee. Linked-PR results and any failed checks are shown on each card. This is evidence-based screening, not AI code analysis. Checked ${new Date(fetched).toLocaleString()}.`
-                      : "Live data has not loaded yet."}
-                  </p>
-                  <div className="issue-list">
-                    {issues
-                      .filter(
-                        (i) =>
-                          i.title
-                            .toLowerCase()
-                            .includes(search.toLowerCase()) &&
-                          (filter === "all" ||
-                            i.labels.some((l) =>
-                              l.name.toLowerCase().includes(filter),
-                            )),
-                      )
-                      .map((i) => (
-                        <article className="issue-row" key={i.number}>
-                          <span className="issue-symbol">⊙</span>
-                          <div>
-                            <div className="issue-meta">
-                              #{i.number} · {i.comments} comments ·{" "}
-                              {i.assignees.length ? "Assigned" : "Unassigned"}
-                            </div>
-                            <h3>{i.title}</h3>
-                            <ul className="candidate-signals">
-                              {i.signals?.map((signal) => (
-                                <li key={signal}>{signal}</li>
-                              ))}
-                            </ul>
-                            <div className="candidate-cautions">
-                              {i.cautions?.map((caution) => (
-                                <p key={caution}>{caution}</p>
-                              ))}
-                            </div>
-                            <div className="labels">
-                              {i.labels.slice(0, 4).map((l) => (
-                                <span key={l.name}>{l.name}</span>
-                              ))}
-                            </div>
-                          </div>
-                          <button
-                            className="secondary"
-                            onClick={() => investigate(i)}
-                          >
-                            Investigate
-                            <ArrowRight size={16} />
-                          </button>
-                        </article>
-                      ))}
-                  </div>
-                  {fetched &&
-                    !issues.filter(
-                      (i) =>
-                        i.title.toLowerCase().includes(search.toLowerCase()) &&
-                        (filter === "all" ||
-                          i.labels.some((l) =>
-                            l.name.toLowerCase().includes(filter),
-                          )),
-                    ).length && (
-                      <div className="empty">
-                        No promising candidates matched this view. Try another
-                        project or adjust your work preferences; we won’t fill
-                        the shortlist with unrelated issues.
-                      </div>
-                    )}
-                </>
-              )}
-            </>
-          ) : view === "brief" ? (
-            <>
-              <button
-                className="back-link"
-                onClick={() => navigate(project ? "issues" : "saved")}
-              >
-                <ArrowLeft size={16} />
-                Back
-              </button>
-              <span className="eyebrow">
-                ISSUE DETECTIVE / EVIDENCE PREVIEW
-              </span>
-              <h1>Mission brief</h1>
-              {busy && (
-                <div className="loading">
-                  <LoaderCircle className="spin" />
-                  {busy}
-                </div>
-              )}
-              {brief && (
-                <>
-                  <div className="brief-title">
-                    <div>
-                      <span className="repo-name">
-                        {brief.repo} #{brief.issue.number}
-                      </span>
-                      <h2>{brief.issue.title}</h2>
-                    </div>
-                    <button className="primary" onClick={saveBrief}>
-                      <Bookmark size={17} />
-                      Save mission
-                    </button>
-                  </div>
-                  <div className="brief-stats">
-                    <div>
-                      <span>ISSUE STATUS</span>
-                      <strong>{brief.issue.state}</strong>
-                    </div>
-                    <div>
-                      <span>COMPETING WORK</span>
-                      <strong>{brief.competition}</strong>
-                    </div>
-                    <div>
-                      <span>ASSIGNMENT</span>
-                      <strong>
-                        {brief.issue.assignees.map((a) => a.login).join(", ") ||
-                          "Unassigned"}
-                      </strong>
-                    </div>
-                  </div>
-                  <div className="brief-grid">
-                    <section className="panel">
-                      <h2>The reported problem</h2>
-                      <p className="issue-body">
-                        {brief.issue.body ||
-                          "No description provided. Read the discussion before choosing this mission."}
-                      </p>
-                      <a
-                        href={brief.issue.html_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Read on GitHub <ExternalLink size={14} />
-                      </a>
-                      <h2 className="mt">Next investigation steps</h2>
-                      <ol>
-                        <li>
-                          Confirm the issue is reproducible on the current
-                          branch.
-                        </li>
-                        <li>
-                          Read the contribution guide and find the relevant
-                          source and tests.
-                        </li>
-                        <li>
-                          Add a failing regression test before changing
-                          behavior.
-                        </li>
-                        <li>
-                          Review any linked work before preparing a patch.
-                        </li>
-                      </ol>
-                      <p className="muted small">
-                        This version collects evidence. AI code analysis,
-                        difficulty estimates, patch generation, and test
-                        execution are not connected yet.
-                      </p>
-                    </section>
-                    <section className="panel">
-                      <h2>Evidence collected</h2>
-                      {brief.evidence.map((e) => (
-                        <div className="evidence" key={e.label}>
-                          <Check size={16} />
-                          <div>
-                            <a href={e.url} target="_blank" rel="noreferrer">
-                              {e.label}
-                              <ExternalLink size={13} />
-                            </a>
-                            <p>{e.detail}</p>
-                          </div>
-                        </div>
-                      ))}
-                      {brief.warnings.map((w) => (
-                        <p className="warning" key={w}>
-                          {w}
-                        </p>
-                      ))}
-                      <p className="muted small">
-                        Checked {new Date(brief.fetchedAt).toLocaleString()}
-                      </p>
-                      {brief.linked.length > 0 && (
-                        <>
-                          <h3>Linked pull requests</h3>
-                          {brief.linked.map((p, i) => (
-                            <p key={i}>
-                              <a href={p.url} target="_blank" rel="noreferrer">
-                                {p.title}
-                              </a>{" "}
-                              · {p.state}
-                            </p>
-                          ))}
-                        </>
-                      )}
-                    </section>
-                  </div>
-                  {brief.comments.length > 0 && (
-                    <section className="panel discussion">
-                      <h2>Recent comments in the fetched sample</h2>
-                      {brief.comments.map((c) => (
-                        <details key={c.url}>
-                          <summary>{c.author}</summary>
-                          <p className="issue-body">{c.body}</p>
-                          <a href={c.url} target="_blank" rel="noreferrer">
-                            View comment
-                            <ExternalLink size={13} />
-                          </a>
-                        </details>
-                      ))}
-                    </section>
-                  )}
-                </>
-              )}
-            </>
-          ) : (
-            <>
-              <span className="eyebrow">MISSION CONTROL</span>
-              <h1>Your next moves.</h1>
-              <p className="intro">
-                Saved investigations, ready when you are. Stored in this
-                browser.
-              </p>
-              {saved.length ? (
-                <div className="issue-list">
-                  {saved.map((b) => (
-                    <article
-                      className="issue-row"
-                      key={`${b.repo}/${b.issue.number}`}
-                    >
-                      <Bookmark size={21} />
-                      <div>
-                        <span className="repo-name">
-                          {b.repo} #{b.issue.number}
-                        </span>
-                        <h3>{b.issue.title}</h3>
-                      </div>
-                      <button
-                        className="secondary"
-                        onClick={() => {
-                          setProject(null);
-                          setBrief(b);
-                          navigate("brief");
-                        }}
-                      >
-                        Open brief
-                        <ArrowRight size={16} />
-                      </button>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty">
-                  <Terminal size={36} />
-                  <h2>Your mission log is a blank canvas.</h2>
-                  <p>
-                    Explore a project, investigate an issue, and save your first
-                    brief.
-                  </p>
-                  <button
-                    className="primary"
-                    onClick={() => navigate("discover")}
-                  >
-                    Discover projects
-                    <ArrowRight size={16} />
-                  </button>
-                </div>
-              )}
-            </>
-          )}
+          {notice && <div className="app-toast" role="status">{notice}<button aria-label="Dismiss notification" onClick={()=>setNotice("")}>×</button></div>}
+          {!ready ? <p>Opening your workspace…</p> : view === "setup" ? <><button className="back-link" onClick={()=>navigate("discover")}>Back to suggested repositories</button><div className="profile-account-actions">{profile.username && <><span>GitHub profile: <strong>{profile.username}</strong></span><button className="secondary" disabled={disconnecting} onClick={disconnect}>{disconnecting ? "Disconnecting…" : "Disconnect GitHub profile"}</button></>}</div><Onboarding profile={profile} setProfile={setProfile} onComplete={()=>{setProfiled(true);try {localStorage.setItem(key,JSON.stringify(profile));} catch {} navigate("discover");}}/></> : view === "discover" ? <Discovery profiled={profiled} profile={profile} openProject={openProject} edit={()=>navigate("setup")}/> : view === "issues" && project ? <SourceScan key={project.repo} project={project} profile={profile} back={()=>navigate("discover")} onSave={save}/> : <><h1>Saved investigations</h1>{opened ? <><button className="back-link" onClick={()=>setOpened(null)}>Back to saved investigations</button><ScanResults scan={opened}/></> : saved.length ? <div className="saved-grid">{saved.map(s=><article className="saved-mission" key={s.scannedAt+s.repo}><div className="saved-mission-top"><span className="eyebrow">SAVED MISSION</span><span>{s.findings.length} suggestions</span></div><h2>{s.repo}</h2><p>{s.focus || "Repository sample"} · {s.files.length} files inspected</p><p className="muted">{new Date(s.scannedAt).toLocaleDateString()} · Commit {s.commit.slice(0,8)}</p><div className="saved-mission-actions"><button className="primary" onClick={()=>setOpened(s)}>Review findings</button><a href={`https://github.com/${s.repo}`} target="_blank" rel="noreferrer">View on GitHub ↗</a></div></article>)}</div> : <div className="empty">Scan a repository and save an investigation to keep it here.</div>}</>}
         </main>
       </SidebarProvider>
     </div>
   );
 }
-

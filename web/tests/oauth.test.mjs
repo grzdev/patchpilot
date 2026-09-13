@@ -82,3 +82,13 @@ test("successful callback stores only public identity, never the GitHub access t
     globalThis.fetch = original;
   }
 });
+
+test("disconnect clears identity and OAuth cookies and rejects cross-origin requests", async () => {
+  const {disconnectIdentity}=await import("../lib/oauth.ts");
+  const response=disconnectIdentity(new Request("https://patchpilot.test/api/auth/github/session",{method:"DELETE",headers:{origin:"https://patchpilot.test"}}));
+  assert.equal(response.status,200);
+  const cookies=response.headers.getSetCookie();
+  assert.equal(cookies.length,2);
+  for(const name of ["pp_identity","pp_oauth"]) assert.ok(cookies.some(cookie=>cookie.startsWith(name+"=") && /Max-Age=0/.test(cookie) && /HttpOnly/.test(cookie) && /Secure/.test(cookie)));
+  assert.equal(disconnectIdentity(new Request("https://patchpilot.test/api/auth/github/session",{method:"DELETE",headers:{origin:"https://other.test"}})).status,403);
+});

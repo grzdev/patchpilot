@@ -197,3 +197,12 @@ export function getIdentity(request: Request) {
     { headers: { "Cache-Control": "no-store" } },
   );
 }
+
+export function disconnectIdentity(request: Request) {
+  if(request.headers.get("origin") !== new URL(request.url).origin) return Response.json({error:"Use the disconnect button in PatchPilot."},{status:403});
+  const headers=new Headers({"Cache-Control":"no-store"});
+  const secure=new URL(request.url).protocol === "https:";
+  headers.append("Set-Cookie",cookie("pp_identity","",secure,0));
+  headers.append("Set-Cookie",cookie("pp_oauth","",secure,0));
+  return Response.json({disconnected:true},{headers});
+}

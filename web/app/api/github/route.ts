@@ -1,3 +1,6 @@
+import { folderOptions } from "@/lib/scan-scope";
+import { eligiblePath } from "@/lib/scan-validation";
+import { repositoryInput } from "@/lib/repository-input";
 import { screenIssue } from "@/lib/screening";
 import {
   github,
@@ -15,6 +18,14 @@ export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
     const action = params.get("action");
+    if(action === "folders") {
+      const repo=repoPath(params.get("repo"));
+      const meta=await github<{private:boolean;default_branch:string}>(`/repos/${repo}`,60000);
+      if(meta.private) throw new GitHubError("Choose a public repository.",400);
+      const tree=await github<{truncated:boolean;tree:{path:string;type:string;mode:string;size?:number}[]}>(`/repos/${repo}/git/trees/${encodeURIComponent(meta.default_branch)}?recursive=1`,60000);
+      const files=tree.tree.filter(f=>f.type === "blob" && f.mode === "100644" && (f.size ?? 99999)<=10000 && eligiblePath(f.path));
+      return Response.json({folders:folderOptions(files),eligible:files.length,truncated:tree.truncated});
+    }
     if (action === "profile") {
       const username = params.get("username")?.trim();
       if (!username || !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38})$/.test(username))
@@ -43,6 +54,15 @@ export async function GET(request: Request) {
       });
     }
     if (action === "projects") {
+      let exact:string|null;
+      try {exact=repositoryInput(params.get("query") || "");}
+      catch(error) {throw new GitHubError((error as Error).message,400,"PatchPilot");}
+      if(exact) {
+        const item=await github<{full_name:string;name:string;language:string|null;description:string|null;private:boolean}>(`/repos/${exact}`);
+        if(item.private) throw new GitHubError("Private repository scanning is not supported yet. Choose a public repository.",400,"PatchPilot");
+        return Response.json({exact:true,more:false,projects:[{repo:item.full_name,name:item.name,language:item.language || "Other",description:item.description || "Your selected repository.",category:"other",mark:item.name[0].toUpperCase(),color:"#93c5fd"}]});
+      }
+
       const topicMap: Record<string, string> = {
         tooling: "developer-tools",
         frontend: "frontend",

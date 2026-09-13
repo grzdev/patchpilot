@@ -19,7 +19,7 @@ export function WorkspaceNavigation({
   const links = [
     {
       id: "discover",
-      title: "Discover",
+      title: "Suggested repos",
       Icon: Compass,
       active: ["discover", "issues", "brief"].includes(view),
     },

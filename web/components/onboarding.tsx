@@ -304,7 +304,7 @@ export function Onboarding({
                   </div>
                   <h3>{c.name}</h3>
                   <p>{c.description}</p>
-                  <div className="repo-examples">{c.examples}</div>
+                  {step === 2 && <div className="repo-examples">{c.examples}</div>}
                 </label>
               );
             })}
