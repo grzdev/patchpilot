@@ -36,7 +36,7 @@ async function requestGitHub<T>(path: string): Promise<T> {
   try {
     response = await fetch(ROOT + path, {
       headers,
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(30000),
     });
   } catch {
     throw new GitHubError("GitHub could not be reached. Please try again.");

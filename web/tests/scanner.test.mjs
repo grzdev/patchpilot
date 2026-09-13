@@ -140,3 +140,12 @@ test("only Groq is selectable even when other credentials exist",()=>{
   assert.equal(selectReviewers("groq")[0].model,"openai/gpt-oss-120b");
   for(const choice of ["orca","hy3","glm","gemini","openrouter","compare"]) assert.throws(()=>selectReviewers(choice),/Only Groq/);
 });
+
+test("Groq bad requests preserve 400 and do not expose provider contents",async()=>{
+  try {
+    globalThis.fetch=async()=>Response.json({error:{code:"json_validate_failed",message:"PRIVATE upstream detail"}},{status:400});
+    await assert.rejects(provider("https://example.org",{}, {},"Groq"),e=>e.status===400 && /output-format failure/.test(e.message) && !e.message.includes("PRIVATE"));
+    globalThis.fetch=async()=>Response.json({error:{message:"PRIVATE upstream detail"}},{status:400});
+    await assert.rejects(provider("https://example.org",{}, {},"Groq"),e=>e.status===400 && /Diagnostic/.test(e.message) && !e.message.includes("PRIVATE"));
+  } finally {globalThis.fetch=originalFetch;}
+});

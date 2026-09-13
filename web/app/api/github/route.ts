@@ -58,9 +58,9 @@ export async function GET(request: Request) {
       try {exact=repositoryInput(params.get("query") || "");}
       catch(error) {throw new GitHubError((error as Error).message,400,"PatchPilot");}
       if(exact) {
-        const item=await github<{full_name:string;name:string;language:string|null;description:string|null;private:boolean}>(`/repos/${exact}`);
+        const item=await github<{full_name:string;name:string;language:string|null;description:string|null;private:boolean;stargazers_count?:number}>(`/repos/${exact}`);
         if(item.private) throw new GitHubError("Private repository scanning is not supported yet. Choose a public repository.",400,"PatchPilot");
-        return Response.json({exact:true,more:false,projects:[{repo:item.full_name,name:item.name,language:item.language || "Other",description:item.description || "Your selected repository.",category:"other",mark:item.name[0].toUpperCase(),color:"#93c5fd"}]});
+        return Response.json({exact:true,more:false,projects:[{repo:item.full_name,name:item.name,language:item.language || "Other",description:item.description || "Your selected repository.",category:"other",mark:item.name[0].toUpperCase(),color:"#93c5fd",stars:item.stargazers_count ?? 0}]});
       }
 
       const topicMap: Record<string, string> = {
@@ -75,14 +75,21 @@ export async function GET(request: Request) {
       const category = params.get("category") || "all",
         language = params.get("language") || "all";
       const page = Number(params.get("page") || 1);
-      if (!Number.isInteger(page) || page < 1 || page > 5)
-        throw new GitHubError("Choose a search page from 1 to 5.", 400);
+      if (!Number.isInteger(page) || page < 1 || page > 10)
+        throw new GitHubError("Choose a search page from 1 to 10.", 400);
       const phrase = (params.get("query") || "").trim().slice(0, 100);
       if (language !== "all" && !/^[A-Za-z0-9+# .-]{1,30}$/.test(language))
         throw new GitHubError("Invalid language filter.", 400);
+      const activity=params.get("activity") || "all", size=params.get("size") || "all", sort=params.get("sort") || "stars";
+      if(!["all","30","90","365"].includes(activity) || !["all","small","medium","large"].includes(size) || !["updated","stars","forks"].includes(sort)) throw new GitHubError("Choose valid repository filters.",400);
+      const since=new Date(Date.now()-(activity === "all" ? 0 : Number(activity))*86400000).toISOString().slice(0,10);
+      const starsFilter = phrase ? "stars:>=0" : (sort === "stars" ? "stars:>=20" : "stars:>=0");
       const q = [
-        phrase || "stars:>25",
+        phrase || starsFilter,
         "archived:false",
+        "is:public",
+        activity !== "all" ? `pushed:>=${since}` : "",
+        size === "small" ? "size:<5000" : size === "medium" ? "size:5000..50000" : size === "large" ? "size:>50000" : "",
         "fork:false",
         topicMap[category] ? `topic:${topicMap[category]}` : "",
         language !== "all" ? `language:"${language}"` : "",
@@ -97,12 +104,14 @@ export async function GET(request: Request) {
           language: string | null;
           description: string | null;
           topics: string[];
+          stargazers_count?: number;
+          private?:boolean; archived?:boolean; disabled?:boolean; size?:number;
         }[];
       }>(
-        `/search/repositories?${new URLSearchParams({ q, per_page: "30", page: String(page), sort: "updated" })}`,
+        `/search/repositories?${new URLSearchParams({ q, per_page: "100", page: String(page), sort })}`,60000,
       );
       return Response.json({
-        projects: result.items.map((item) => ({
+        projects: result.items.filter(item=>!item.private && !item.archived && !item.disabled && item.size !== 0).map((item) => ({
           repo: item.full_name,
           name: item.name,
           language: item.language || "Other",
@@ -116,11 +125,12 @@ export async function GET(request: Request) {
                 )?.[0] || "other",
           mark: item.name[0].toUpperCase(),
           color: "#93c5fd",
+          stars: item.stargazers_count ?? 0,
         })),
         more:
-          result.items.length === 30 &&
-          page < 5 &&
-          result.total_count > page * 30,
+          result.items.length === 100 &&
+          page < 10 &&
+          result.total_count > page * 100,
       });
     }
     const repo = repoPath(params.get("repo"));

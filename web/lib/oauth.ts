@@ -155,9 +155,8 @@ export async function finishOAuth(request: Request) {
     const reposResponse = await fetch(
       `https://api.github.com/users/${user.login}/repos?per_page=100&sort=updated&type=owner`,
       { headers, signal: AbortSignal.timeout(15000) },
-    );
-    if (!reposResponse.ok) throw new Error("profile");
-    const repos = (await reposResponse.json()) as {
+    ).catch(()=>null);
+    const repos = (reposResponse?.ok ? await reposResponse.json().catch(()=>[]) : []) as {
       language: string | null;
       fork: boolean;
     }[];

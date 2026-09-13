@@ -460,7 +460,11 @@ export const projects = [
     color: "#93c5fd",
   },
 ];
-export type Project = (typeof projects)[number];
+export type Project = (typeof projects)[number] & {
+  stars?: number;
+  reason?: string;
+  score?: number;
+};
 export type Profile = {
   username: string;
   skills: string[];

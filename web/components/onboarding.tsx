@@ -42,6 +42,9 @@ export function Onboarding({
     [error, setError] = useState(""),
     [note, setNote] = useState(""),
     [connected, setConnected] = useState("");
+  const activeUser = (connected || profile.username || "").trim();
+  const isGitHubConnected = Boolean(activeUser);
+
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const oauthOutcome = useRef<string | null>(null);
@@ -59,12 +62,13 @@ export function Onboarding({
     const query = new URLSearchParams(window.location.search);
     if (query.has("auth")) oauthOutcome.current = query.get("auth");
     fetch("/api/auth/github/session")
-      .then((r) => r.json())
+      .then((r) => {if(!r.ok)throw new Error("Session lookup failed");return r.json();})
       .then((data: unknown) => {
         const result = data as {
           profile?: { username: string; languages: string[] };
         };
         if (active && result.profile) {
+          setError("");
           setConnected(result.profile.username);
           if (oauthOutcome.current === "connected") setStep(1);
           setNote(
@@ -146,11 +150,13 @@ export function Onboarding({
         username: data.username,
         skills: data.languages,
       });
+      setConnected(data.username);
       setNote(
-        `Read ${data.sample} public repositories. Review your language suggestions next.`,
+        `Imported ${data.username}’s public repositories (${data.sample} inspected). Review your language list below.`,
       );
-    } catch (e) {
-      setError((e as Error).message);
+      move(1);
+    } catch (err) {
+      setError((err as Error).message || "Import failed.");
     } finally {
       setBusy(false);
     }
@@ -164,8 +170,8 @@ export function Onboarding({
           ? profile.kinds.length > 0
           : true;
   return (
-    <section className="onboarding">
-      <div className="step-trail">
+    <section className="panel wizard" aria-label="Profile setup">
+      <div className="setup-meta">
         <span>YOUR DEVELOPER PROFILE</span>
         <span>
           Step {step + 1} of {titles.length}
@@ -190,54 +196,66 @@ export function Onboarding({
             <div className="connect-card">
               <CodeXml size={28} />
               <h2>
-                {connected ? `Connected as ${connected}` : "The easy way in"}
+                {isGitHubConnected ? `Connected as ${activeUser}` : "The easy way in"}
               </h2>
               <p>
-                Verify your account and import your public profile. No private
-                repository access requested.
+                {isGitHubConnected
+                  ? "Your GitHub profile is verified. You can proceed to review your skills and contribution preferences."
+                  : "Verify your account and import your public profile. No private repository access requested."}
               </p>
-              {connected ? (
-                <span className="connected">
-                  <Check size={16} />
-                  GitHub verified
-                </span>
+              {isGitHubConnected ? (
+                <div className="profile-account-actions" style={{ margin: "14px 0 0" }}>
+                  <span className="connected">
+                    <Check size={16} />
+                    GitHub verified
+                  </span>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => move(1)}
+                  >
+                    Continue to toolkit <ArrowRight size={16} />
+                  </button>
+                </div>
               ) : (
                 <a className="primary" href="/api/auth/github">
                   Continue with GitHub <ArrowRight size={16} />
                 </a>
               )}
             </div>
-            <div className="manual-import">
-              <h3>Or use your public username</h3>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  importUsername();
-                }}
-              >
-                <input
-                  aria-label="GitHub username"
-                  placeholder="e.g. grzdev"
-                  value={profile.username}
-                  onChange={(e) =>
-                    setProfile({ ...profile, username: e.target.value })
-                  }
-                />
-                <button
-                  className="secondary"
-                  disabled={busy || !profile.username.trim()}
+            {!isGitHubConnected && (
+              <div className="manual-import">
+                <h3>Or use your public username</h3>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    importUsername();
+                  }}
                 >
-                  {busy ? (
-                    <LoaderCircle size={16} className="spin" />
-                  ) : (
-                    "Import profile"
-                  )}
-                </button>
-              </form>
-              <p className="muted small">
-                Prefer to skip GitHub? Continue and choose your skills yourself.
-              </p>
-            </div>
+                  <input
+                    aria-label="GitHub username"
+                    placeholder="e.g. grzdev"
+                    value={profile.username}
+                    onChange={(e) =>
+                      setProfile({ ...profile, username: e.target.value })
+                    }
+                  />
+                  <button
+                    className="secondary"
+                    disabled={busy || !profile.username.trim()}
+                  >
+                    {busy ? (
+                      <LoaderCircle size={16} className="spin" />
+                    ) : (
+                      "Import profile"
+                    )}
+                  </button>
+                </form>
+                <p className="muted small">
+                  Prefer to skip GitHub? Continue and choose your skills yourself.
+                </p>
+              </div>
+            )}
             {note && (
               <p role="status" className="message">
                 {note}
@@ -370,6 +388,11 @@ export function Onboarding({
                 id: "familiar",
                 title: "Build on what I know",
                 description: "Favor the languages and ecosystems you selected.",
+              },
+              {
+                id: "mixed",
+                title: "A bit of both",
+                description: "Mix familiar languages with something new to explore.",
               },
               {
                 id: "new",

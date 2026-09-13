@@ -11,10 +11,11 @@ import type { Scan } from "@/lib/scan-types";
 const key = "patchpilot.profile.v1", savedKey = "patchpilot.scans.v1";
 export default function Home() {
   const [profile,setProfile] = useState<Profile>(initialProfile), [ready,setReady] = useState(false),
-    [disconnecting,setDisconnecting] = useState(false), [profiled,setProfiled] = useState(false), [view,setView] = useState("discover"), [project,setProject] = useState<Project|null>(null),
-    [saved,setSaved] = useState<Scan[]>([]), [opened,setOpened] = useState<Scan|null>(null), [notice,setNotice] = useState("");
+    [profileSession,setProfileSession] = useState(0), [disconnecting,setDisconnecting] = useState(false), [profiled,setProfiled] = useState(false), [view,setView] = useState("discover"), [project,setProject] = useState<Project|null>(null),
+    [missionOwner,setMissionOwner] = useState(""), [saved,setSaved] = useState<Scan[]>([]), [opened,setOpened] = useState<Scan|null>(null), [notice,setNotice] = useState("");
   useEffect(()=> {
     const params = new URLSearchParams(window.location.search);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if(params.has("auth")) setView("setup");
     const repoParam = params.get("repo");
     if(repoParam) {
@@ -30,35 +31,51 @@ export default function Home() {
     try {
       const p = JSON.parse(localStorage.getItem(key) || "null");
       if (p && Array.isArray(p.skills) && Array.isArray(p.kinds) && Array.isArray(p.interests)) {
-        // Restore preferences from browser storage after hydration.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setProfile({...initialProfile,...p});setProfiled(true);
         if (!params.has("auth") && !repoParam) setView("discover");
       }
-      const scans = JSON.parse(localStorage.getItem(savedKey) || "[]");
-      if (Array.isArray(scans)) setSaved(scans.filter(s=>s?.repo && s?.commit && Array.isArray(s.files) && Array.isArray(s.findings) && Array.isArray(s.warnings) && Array.isArray(s.research)));
+
     } catch {}
     setReady(true);
   },[]);
   useEffect(()=>{window.scrollTo({top:0,behavior:"instant"});document.getElementById("main")?.scrollTo({top:0,behavior:"instant"});},[view,project,opened]);
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(""),5000);return()=>clearTimeout(timer);},[notice]);
+  useEffect(()=>{
+    let active=true;
+    fetch("/api/auth/github/session").then(async response=>{
+      if(!response.ok)throw new Error();
+      const data=await response.json() as {profile?:{username:string}};
+      if(!active)return;
+      const owner=data.profile?.username.toLowerCase() || "";
+      setMissionOwner(owner);setSaved([]);
+      if(!owner)return;
+      try {
+        const scans=JSON.parse(localStorage.getItem(savedKey+":"+owner) || "[]");
+        if(Array.isArray(scans))setSaved(scans.filter(s=>s?.repo && s?.commit && Array.isArray(s.findings) && Array.isArray(s.files) && Array.isArray(s.warnings) && Array.isArray(s.research)));
+      } catch {}
+    }).catch(()=>{if(active){setMissionOwner("");setSaved([]);}});
+    return()=>{active=false;};
+  },[profileSession,profile.username]);
   async function disconnect() {
     setDisconnecting(true);
     try {
       const response=await fetch("/api/auth/github/session",{method:"DELETE"});
       if(!response.ok)throw new Error("Could not disconnect. Please retry.");
-      setProfile(initialProfile);setProfiled(false);
+      if(missionOwner) {try {localStorage.setItem(savedKey+":"+missionOwner,JSON.stringify(saved));} catch {}}
+      setSaved([]);setOpened(null);setMissionOwner("");
+      setProfile(initialProfile);setProfiled(false);setProfileSession(n=>n+1);
       try {localStorage.removeItem(key);} catch {}
       window.history.replaceState({},"",window.location.pathname);
-      setView("discover");setNotice("GitHub profile removed. Open Your profile to connect another account.");
+      setView("setup");setNotice("GitHub profile disconnected. You can now connect another account.");
     } catch(error) {setNotice((error as Error).message);} finally {setDisconnecting(false);}
   }
   function navigate(next:string) {setNotice("");setOpened(null);setView(next);}
   function openProject(p:Project) {setProject(p);navigate("issues");}
   function save(scan:Scan) {
+    if(!missionOwner){setNotice("Sign in with GitHub to save missions to your profile.");return;}
     const next = [scan,...saved.filter(s=>s.repo!==scan.repo || s.commit!==scan.commit || s.scannedAt!==scan.scannedAt)].slice(0,20);
     setSaved(next);
-    try {localStorage.setItem(savedKey,JSON.stringify(next));setNotice("Added to My missions.");}
+    try {localStorage.setItem(savedKey+":"+missionOwner,JSON.stringify(next));setNotice("Added to My missions.");}
     catch {setNotice("Saved for this session. Browser storage is unavailable.");}
   }
   return (
@@ -109,7 +126,7 @@ export default function Home() {
         />
         <main id="main">
           {notice && <div className="app-toast" role="status">{notice}<button aria-label="Dismiss notification" onClick={()=>setNotice("")}>×</button></div>}
-          {!ready ? <p>Opening your workspace…</p> : view === "setup" ? <><button className="back-link" onClick={()=>navigate("discover")}>Back to suggested repositories</button><div className="profile-account-actions">{profile.username && <><span>GitHub profile: <strong>{profile.username}</strong></span><button className="secondary" disabled={disconnecting} onClick={disconnect}>{disconnecting ? "Disconnecting…" : "Disconnect GitHub profile"}</button></>}</div><Onboarding profile={profile} setProfile={setProfile} onComplete={()=>{setProfiled(true);try {localStorage.setItem(key,JSON.stringify(profile));} catch {} navigate("discover");}}/></> : view === "discover" ? <Discovery profiled={profiled} profile={profile} openProject={openProject} edit={()=>navigate("setup")}/> : view === "issues" && project ? <SourceScan key={project.repo} project={project} profile={profile} back={()=>navigate("discover")} onSave={save}/> : <><h1>Saved investigations</h1>{opened ? <><button className="back-link" onClick={()=>setOpened(null)}>Back to saved investigations</button><ScanResults scan={opened}/></> : saved.length ? <div className="saved-grid">{saved.map(s=><article className="saved-mission" key={s.scannedAt+s.repo}><div className="saved-mission-top"><span className="eyebrow">SAVED MISSION</span><span>{s.findings.length} suggestions</span></div><h2>{s.repo}</h2><p>{s.focus || "Repository sample"} · {s.files.length} files inspected</p><p className="muted">{new Date(s.scannedAt).toLocaleDateString()} · Commit {s.commit.slice(0,8)}</p><div className="saved-mission-actions"><button className="primary" onClick={()=>setOpened(s)}>Review findings</button><a href={`https://github.com/${s.repo}`} target="_blank" rel="noreferrer">View on GitHub ↗</a></div></article>)}</div> : <div className="empty">Scan a repository and save an investigation to keep it here.</div>}</>}
+          {!ready ? <p>Opening your workspace…</p> : view === "setup" ? <><button className="back-link" onClick={()=>navigate("discover")}>Back to suggested repositories</button><div className="profile-account-actions">{profile.username && <><span>GitHub profile: <strong>{profile.username}</strong></span><button className="secondary" disabled={disconnecting} onClick={disconnect}>{disconnecting ? "Disconnecting…" : "Disconnect GitHub profile"}</button></>}</div><Onboarding key={profileSession} profile={profile} setProfile={setProfile} onComplete={()=>{setProfiled(true);try {localStorage.setItem(key,JSON.stringify(profile));} catch {} navigate("discover");}}/></> : view === "discover" ? <Discovery profiled={profiled} profile={profile} openProject={openProject} edit={()=>navigate("setup")}/> : view === "issues" && project ? <SourceScan key={project.repo} project={project} profile={profile} back={()=>navigate("discover")} onSave={save}/> : <><h1>Saved investigations</h1>{opened ? <><button className="back-link" onClick={()=>setOpened(null)}>Back to saved investigations</button><ScanResults scan={opened}/></> : saved.length ? <div className="saved-grid">{saved.map(s=><article className="saved-mission" key={s.scannedAt+s.repo}><div className="saved-mission-top"><span className="eyebrow">SAVED MISSION</span><span>{s.findings.length} suggestions</span></div><h2>{s.repo}</h2><p>{s.focus || "Repository sample"} · {s.files.length} files inspected</p><p className="muted">{new Date(s.scannedAt).toLocaleDateString()} · Commit {s.commit.slice(0,8)}</p><div className="saved-mission-actions"><button className="primary" onClick={()=>setOpened(s)}>Review findings</button><a href={`https://github.com/${s.repo}`} target="_blank" rel="noreferrer">View on GitHub ↗</a></div></article>)}</div> : <div className="empty"><p>Scan a repository and save an investigation to keep it here.</p><button type="button" className="secondary" style={{ marginTop: "14px" }} onClick={()=>navigate("discover")}>Explore suggested repositories</button></div>}</>}
         </main>
       </SidebarProvider>
     </div>

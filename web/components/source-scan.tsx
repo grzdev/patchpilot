@@ -47,7 +47,7 @@ function FindingCard({scan,index,onNotice}:{scan:Scan;index:number;onNotice:(mes
     </div>
   </details>;
 }
-export function ScanResults({scan,onSave,onContinueScan,continuing}:{scan:Scan;onSave?:(scan:Scan)=>void;onContinueScan?:()=>void;continuing?:boolean}) {
+export function ScanResults({scan,onSave,onContinueScan,continuing,onBack}:{scan:Scan;onSave?:(scan:Scan)=>void;onContinueScan?:()=>void;continuing?:boolean;onBack?:()=>void}) {
   const [notice,setNotice]=useState("");
   useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(""),4500);return()=>clearTimeout(timer);},[notice]);
   const references=scan.research.map(readableReference).filter(r=>r!==null);
@@ -76,7 +76,19 @@ export function ScanResults({scan,onSave,onContinueScan,continuing}:{scan:Scan;o
       {scan.hasMore ? (
         <p className="muted">There are {remaining} more eligible files in this area. Continue scanning to check the next batch.</p>
       ) : (
-        <p className="muted">All {totalEligible} eligible files have been inspected. Try another folder or repository.</p>
+        <>
+          <p className="muted">All {totalEligible} eligible files have been inspected. Try another folder or repository.</p>
+          {onBack && (
+            <button
+              type="button"
+              className="secondary"
+              style={{ marginTop: "14px", display: "inline-flex", alignItems: "center", gap: "6px" }}
+              onClick={onBack}
+            >
+              <ArrowLeft size={14} /> Explore more repositories
+            </button>
+          )}
+        </>
       )}
     </div>}
     
@@ -247,5 +259,5 @@ export function SourceScan({project,profile,back,onSave}:{project:Project;profil
       <details open><summary>Activity so far ({events.length} updates)</summary><ol className="scan-activity">{events.map((event,index)=><li key={index}>{event.message}</li>)}</ol></details>
     </section>}
     {error && <div className="message error" role="alert"><strong>{error.source || "Scan"}{error.status ? ` · ${error.status}` : ""}</strong><p>{error.error}</p>{retrySeconds > 0 && <p>You can retry in {retrySeconds}s.</p>}{error.source === "Gemini" && <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer">Check Gemini API quota in AI Studio</a>}</div>}
-    {scan && <ScanResults scan={scan} onSave={onSave} onContinueScan={()=>start(true)} continuing={busy || retrySeconds>0}/>}</>;
+    {scan && <ScanResults scan={scan} onSave={onSave} onContinueScan={()=>start(true)} continuing={busy || retrySeconds>0} onBack={back}/>}</>;
 }

@@ -1,6 +1,6 @@
 "use client";
 import { Bookmark, Compass, Settings2 } from "lucide-react";
-import { Sidebar, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 type Props = {
   view: string;
   count: number;
@@ -11,11 +11,12 @@ export function WorkspaceNavigation({
   view,
   count,
   navigate,
-  compact = false,
+  compact: duplicate = false,
 }: Props) {
   const { open, openMobile, isMobile, setOpenMobile } = useSidebar();
   const expanded = isMobile ? openMobile : open;
-  if (compact === expanded) return null;
+  if (duplicate) return null;
+  const compact = !expanded;
   const links = [
     {
       id: "discover",
@@ -39,7 +40,7 @@ export function WorkspaceNavigation({
   const content = (
     <>
       <div className="rail-heading">
-        {!compact && <span className="rail-label">WORKSPACE</span>}
+        <span className="rail-label">WORKSPACE</span>
         <SidebarTrigger
           aria-label={compact ? "Open sidebar" : "Close sidebar"}
           title={compact ? "Open sidebar" : "Close sidebar"}
@@ -58,40 +59,25 @@ export function WorkspaceNavigation({
           }}
         >
           <Icon size={19} />
-          {!compact && (
-            <>
-              {title}
-              {id === "saved" && <span className="count">{count}</span>}
-            </>
-          )}
+          <span className="nav-label">
+            <span className="nav-title">{title}</span>
+            {id === "saved" && count > 0 ? (
+              <span className="count">{count}</span>
+            ) : null}
+          </span>
         </button>
       ))}
-      {!compact && (
-        <div className="rail-bottom">
-          <span className="mini-code">&gt;_</span>
-          <strong>
-            Small patches.
-            <br />
-            Real impact.
-          </strong>
-          <p>Your next contribution starts with a little curiosity.</p>
-          <span className="version">PATCHPILOT / v0.1</span>
-        </div>
-      )}
+      <div className="rail-bottom">
+        <span className="mini-code">&gt;_</span>
+        <strong>
+          Small patches.
+          <br />
+          Real impact.
+        </strong>
+        <p>Your next contribution starts with a little curiosity.</p>
+        <span className="version">PATCHPILOT / v0.1</span>
+      </div>
     </>
   );
-  return compact ? (
-    <nav aria-label="Workspace shortcuts" className="compact-rail">
-      {content}
-    </nav>
-  ) : (
-    <Sidebar
-      collapsible="none"
-      className="rail flow-sidebar"
-      role="navigation"
-      aria-label="Workspace"
-    >
-      {content}
-    </Sidebar>
-  );
+  return <nav aria-label="Workspace" className={"rail flow-sidebar animated-rail " + (compact ? "is-collapsed" : "")}>{content}</nav>;
 }

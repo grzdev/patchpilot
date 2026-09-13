@@ -92,3 +92,17 @@ test("disconnect clears identity and OAuth cookies and rejects cross-origin requ
   for(const name of ["pp_identity","pp_oauth"]) assert.ok(cookies.some(cookie=>cookie.startsWith(name+"=") && /Max-Age=0/.test(cookie) && /HttpOnly/.test(cookie) && /Secure/.test(cookie)));
   assert.equal(disconnectIdentity(new Request("https://patchpilot.test/api/auth/github/session",{method:"DELETE",headers:{origin:"https://other.test"}})).status,403);
 });
+
+test("repository quota failure does not invalidate successful GitHub sign-in", async()=>{
+  const started=await startOAuth();
+  const state=new URL(started.headers.get("location")).searchParams.get("state");
+  const original=globalThis.fetch;let calls=0;
+  globalThis.fetch=async()=>{calls++;return calls===1 ? Response.json({access_token:"TEST"}) : calls===2 ? Response.json({login:"tester"}) : Response.json({}, {status:429});};
+  try {
+    const response=await finishOAuth(new Request(`http://localhost:5173/api/auth/github/callback?code=fake&state=${state}`,{headers:{cookie:started.headers.get("set-cookie").split(";")[0]}}));
+    assert.ok(response.headers.get("location").endsWith("auth=connected"));
+    const identity=response.headers.getSetCookie().find(c=>c.startsWith("pp_identity="));
+    const session=await getIdentity(new Request("http://localhost:5173/api/auth/github/session",{headers:{cookie:identity.split(";")[0]}})).json();
+    assert.deepEqual(session.profile,{username:"tester",languages:[]});
+  } finally {globalThis.fetch=original;}
+});

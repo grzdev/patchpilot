@@ -30,6 +30,11 @@ export async function provider<T>(url: string, headers: Record<string,string>, b
         if (delay > 0) retryAfterSeconds = Math.ceil(delay);
       } catch {}
     }
+    if(res.status===400) {
+      const code=(payload as {error?:{code?:unknown}})?.error?.code;
+      const message=code === "json_validate_failed" ? "Groq could not produce the required JSON response. This is an output-format failure, not proof that credits are exhausted." : code === "context_length_exceeded" ? "The review exceeded the model context limit. Choose a smaller area." : `${name} rejected the review request (400). This does not establish that your quota is exhausted. Diagnostic ${id} has been saved for investigation.`;
+      throw new GitHubError(message,400,name);
+    }
     const ErrorType = res.status === 429 || res.status >= 500 ? ProviderUnavailable : GitHubError;
     throw new ErrorType(res.status === 429
       ? `${name} quota reached.${name === "Gemini" ? " Check the selected model's available quota in Google AI Studio. A rate limit may reset soon; a daily or unavailable free-tier allowance may not." : " Check your provider allowance before retrying."}`
