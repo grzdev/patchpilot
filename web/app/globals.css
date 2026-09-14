@@ -360,21 +360,27 @@ input::placeholder {
   font-weight: 550;
   white-space: nowrap;
 }
-.primary {
+.primary,
+a.primary {
   background: var(--primary);
   border: 1px solid var(--primary);
   color: #152008;
 }
-.primary:hover {
+.primary:hover,
+a.primary:hover {
   background: #d1ff91;
+  color: #152008;
 }
-.secondary {
+.secondary,
+a.secondary {
   background: #1b2429;
   border: 1px solid #3d4b4a;
   color: #eef4e7;
 }
-.secondary:hover {
+.secondary:hover,
+a.secondary:hover {
   background: #293630;
+  color: #eef4e7;
 }
 .text-button {
   background: none;
@@ -794,12 +800,28 @@ input::placeholder {
   max-height: 450px;
   overflow: auto;
 }
-.panel a {
+.panel a:not(.primary):not(.secondary) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   color: #c2f970;
   font-size: 14px;
+}
+.panel a.primary,
+.panel .primary {
+  color: #152008;
+}
+.panel a.primary:hover,
+.panel .primary:hover {
+  color: #152008;
+}
+.panel a.secondary,
+.panel .secondary {
+  color: #eef4e7;
+}
+.panel a.secondary:hover,
+.panel .secondary:hover {
+  color: #eef4e7;
 }
 .panel ol {
   padding-left: 20px;
@@ -1027,13 +1049,17 @@ input::placeholder {
 .workspace-controls + .breadcrumb {
   margin-bottom: 30px;
 }
-.onboarding {
+.onboarding,
+.wizard {
   max-width: 980px;
   margin: 0 auto;
 }
+.setup-meta,
 .step-trail {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 16px;
   color: #93a58b;
   font:
     12px ui-monospace,
@@ -1243,6 +1269,7 @@ input::placeholder {
   .step-scene {
     min-height: 300px;
   }
+  .setup-meta,
   .step-trail {
     font-size: 10px;
   }
@@ -1255,7 +1282,8 @@ input::placeholder {
   .filters-panel > label {
     flex: 1;
   }
-  .onboarding .category-grid {
+  .onboarding .category-grid,
+  .wizard .category-grid {
     grid-template-columns: 1fr;
   }
 }
