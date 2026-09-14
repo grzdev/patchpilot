@@ -107,3 +107,32 @@ test("repository quota failure does not invalidate successful GitHub sign-in", a
     assert.deepEqual(session.profile,{username:"tester",languages:[]});
   } finally {globalThis.fetch=original;}
 });
+
+test("deployed site uses request host for callback and redirect even if environment variable was localhost", async () => {
+  const proxyHeaders = {
+    host: "127.0.0.1:8888",
+    "x-forwarded-host": "patchpiilot.netlify.app",
+    "x-forwarded-proto": "https",
+  };
+  const startReq = new Request("http://127.0.0.1:8888/api/auth/github", {
+    headers: proxyHeaders,
+  });
+  const started = await startOAuth(startReq);
+  const target = new URL(started.headers.get("location"));
+  assert.equal(
+    target.searchParams.get("redirect_uri"),
+    "https://patchpiilot.netlify.app/api/auth/github/callback",
+  );
+  assert.ok(started.headers.get("set-cookie").includes("Secure"));
+
+  const badReq = new Request(
+    "http://127.0.0.1:8888/api/auth/github/callback?code=fake&state=wrong",
+    { headers: proxyHeaders },
+  );
+  const bad = await finishOAuth(badReq);
+  assert.equal(
+    bad.headers.get("location"),
+    "https://patchpiilot.netlify.app/?auth=failed",
+  );
+});
+

@@ -1,2 +1,5 @@
 import {startOAuth} from '@/lib/oauth';
-export const GET=startOAuth;
+export async function GET(request: Request) {
+  return startOAuth(request);
+}
+

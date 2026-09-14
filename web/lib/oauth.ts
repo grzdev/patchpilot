@@ -5,14 +5,83 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 type Identity = { username: string; languages: string[]; exp: number };
-function config() {
+export function getRequestOrigin(request?: Request): string | null {
+  if (!request) return null;
+  const forwardedHost = (
+    request.headers.get("x-forwarded-host") ||
+    request.headers.get("host") ||
+    ""
+  ).split(",")[0].trim();
+
+  if (forwardedHost) {
+    const forwardedProto = (
+      request.headers.get("x-forwarded-proto") || ""
+    ).split(",")[0].trim();
+    const proto =
+      forwardedProto ||
+      (["localhost", "127.0.0.1"].some((h) => forwardedHost.startsWith(h))
+        ? "http"
+        : "https");
+    return `${proto}://${forwardedHost}`;
+  }
+
+  try {
+    return new URL(request.url).origin;
+  } catch {
+    return null;
+  }
+}
+
+function config(request?: Request) {
   const id = process.env.GITHUB_CLIENT_ID;
   const secret = process.env.GITHUB_CLIENT_SECRET;
   const session = process.env.AUTH_SESSION_SECRET;
-  const callback = process.env.GITHUB_CALLBACK_URL;
-  if (!id || !secret || !session || session.length < 32 || !callback)
+  const envCallback =
+    process.env.GITHUB_CALLBACK_URL ||
+    (process.env.URL ? `${process.env.URL}/api/auth/github/callback` : null);
+
+  if (!id || !secret || !session || session.length < 32)
     return null;
+
   try {
+    const reqOrigin = getRequestOrigin(request);
+    let origin: string;
+    let callback: string;
+    let secure: boolean;
+
+    if (envCallback) {
+      const parsedEnv = new URL(envCallback);
+      const isEnvLocal = ["localhost", "127.0.0.1"].includes(parsedEnv.hostname);
+
+      if (reqOrigin) {
+        const parsedReq = new URL(reqOrigin);
+        const isReqLocal = ["localhost", "127.0.0.1"].includes(parsedReq.hostname);
+
+        // If request is from a deployed host and env callback was localhost,
+        // use request origin to avoid redirecting live users to localhost.
+        if (!isReqLocal && isEnvLocal) {
+          origin = parsedReq.origin;
+          callback = `${parsedReq.origin}/api/auth/github/callback`;
+          secure = parsedReq.protocol === "https:";
+        } else {
+          origin = parsedEnv.origin;
+          callback = envCallback;
+          secure = parsedEnv.protocol === "https:";
+        }
+      } else {
+        origin = parsedEnv.origin;
+        callback = envCallback;
+        secure = parsedEnv.protocol === "https:";
+      }
+    } else if (reqOrigin) {
+      const parsedReq = new URL(reqOrigin);
+      origin = parsedReq.origin;
+      callback = `${parsedReq.origin}/api/auth/github/callback`;
+      secure = parsedReq.protocol === "https:";
+    } else {
+      return null;
+    }
+
     const url = new URL(callback);
     if (
       url.protocol !== "https:" &&
@@ -23,13 +92,14 @@ function config() {
     )
       return null;
     if (url.pathname !== "/api/auth/github/callback") return null;
+
     return {
       id,
       secret,
       session,
       callback,
-      origin: url.origin,
-      secure: url.protocol === "https:",
+      origin,
+      secure,
     };
   } catch {
     return null;
@@ -80,8 +150,8 @@ function redirect(url: string, cookies: string[] = []) {
   cookies.forEach((c) => headers.append("Set-Cookie", c));
   return new Response(null, { status: 302, headers });
 }
-export async function startOAuth() {
-  const c = config();
+export async function startOAuth(request?: Request) {
+  const c = config(request);
   if (!c) return redirect("/?auth=unavailable");
   const state = randomBytes(32).toString("base64url"),
     verifier = randomBytes(32).toString("base64url");
@@ -103,7 +173,7 @@ export async function startOAuth() {
   ]);
 }
 export async function finishOAuth(request: Request) {
-  const c = config();
+  const c = config(request);
   if (!c) return redirect("/?auth=unavailable");
   const clear = cookie("pp_oauth", "", c.secure, 0);
   const params = new URL(request.url).searchParams;
@@ -182,7 +252,7 @@ export async function finishOAuth(request: Request) {
   }
 }
 export function getIdentity(request: Request) {
-  const c = config();
+  const c = config(request);
   const identity = c
     ? verifyPayload<Identity>(readCookie(request, "pp_identity"), c.session)
     : null;
@@ -234,6 +304,12 @@ export function isSameOrigin(request: Request): boolean {
     if (process.env.GITHUB_CALLBACK_URL) {
       const cbOrigin = new URL(process.env.GITHUB_CALLBACK_URL).origin;
       if (originUrl.origin === cbOrigin) return true;
+    }
+
+    // Check configured Netlify/site URL origin
+    if (process.env.URL) {
+      const siteOrigin = new URL(process.env.URL).origin;
+      if (originUrl.origin === siteOrigin) return true;
     }
   } catch {
     return false;

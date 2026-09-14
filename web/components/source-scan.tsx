@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { LoaderCircle, ArrowLeft } from "lucide-react";
+import { LoaderCircle, ArrowLeft, ArrowRight } from "lucide-react";
 import type { Profile, Project } from "@/lib/catalog";
 import { readScanStream } from "@/lib/read-scan-stream";
 import { prDraft, readableReference } from "@/lib/presentation";
@@ -139,7 +139,21 @@ export function ScanResults({scan,onSave,onContinueScan,continuing,onBack}:{scan
     </footer>}
   </div>;
 }
-export function SourceScan({project,profile,back,onSave}:{project:Project;profile:Profile;back:()=>void;onSave:(scan:Scan)=>void}) {
+export function SourceScan({
+  project,
+  profile,
+  back,
+  onSave,
+  onSignIn,
+  onNotice,
+}: {
+  project: Project;
+  profile: Profile;
+  back: () => void;
+  onSave: (scan: Scan) => void;
+  onSignIn?: () => void;
+  onNotice?: (message: string, action?: { label: string; onClick: () => void }) => void;
+}) {
   const [scan,setScan] = useState<Scan|null>(null), [busy,setBusy] = useState(false),
     [error,setError] = useState<ScanFailure|null>(null), [focus,setFocus] = useState(""), [folders,setFolders] = useState<{path:string;count:number}[]>([]), [folderState,setFolderState] = useState("Loading repository folders…"),
     [folderAttempt,setFolderAttempt] = useState(0), [events,setEvents] = useState<ScanProgress[]>([]), [started,setStarted] = useState(0),
@@ -192,7 +206,14 @@ export function SourceScan({project,profile,back,onSave}:{project:Project;profil
       });
       if (!response.ok) {
         const info = await response.json() as ScanFailure;
-        fail(info);return;
+        fail(info);
+        if ((info.status === 401 || /sign in with github/i.test(info.error)) && onSignIn) {
+          onNotice?.("Sign in with GitHub before running a scan.", {
+            label: "Sign in with GitHub",
+            onClick: onSignIn,
+          });
+        }
+        return;
       }
       if (!response.body) throw new Error("This browser could not open the scan progress stream.");
       await readScanStream(response.body,event=>{
@@ -258,6 +279,23 @@ export function SourceScan({project,profile,back,onSave}:{project:Project;profil
       {busy && events.at(-1)?.stage === "review" && <p className="muted">Waiting for the reviewer response. No completion percentage is available during this step.</p>}
       <details open><summary>Activity so far ({events.length} updates)</summary><ol className="scan-activity">{events.map((event,index)=><li key={index}>{event.message}</li>)}</ol></details>
     </section>}
-    {error && <div className="message error" role="alert"><strong>{error.source || "Scan"}{error.status ? ` · ${error.status}` : ""}</strong><p>{error.error}</p>{retrySeconds > 0 && <p>You can retry in {retrySeconds}s.</p>}{error.source === "Gemini" && <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer">Check Gemini API quota in AI Studio</a>}</div>}
+    {error && <div className="message error" role="alert">
+      <strong>{error.source || "Scan"}{error.status ? ` · ${error.status}` : ""}</strong>
+      <p>{error.error}</p>
+      {(error.status === 401 || /sign in with github/i.test(error.error)) && onSignIn && (
+        <div style={{ marginTop: "12px" }}>
+          <button
+            type="button"
+            className="primary"
+            onClick={onSignIn}
+            style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
+          >
+            Sign in with GitHub <ArrowRight size={16} />
+          </button>
+        </div>
+      )}
+      {retrySeconds > 0 && <p>You can retry in {retrySeconds}s.</p>}
+      {error.source === "Gemini" && <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer">Check Gemini API quota in AI Studio</a>}
+    </div>}
     {scan && <ScanResults scan={scan} onSave={onSave} onContinueScan={()=>start(true)} continuing={busy || retrySeconds>0} onBack={back}/>}</>;
 }
