@@ -1,5 +1,8 @@
 # PatchPilot Web App
 
+> 🚀 **Live Site:** [https://patchpiilot.netlify.app/](https://patchpiilot.netlify.app/)  
+> 🎬 **Demo Video:** [Watch on Google Drive](https://drive.google.com/file/d/1OlccgJn44maRAvb5Gq9dyJnN43aesBPh/view?usp=sharing)
+
 The web frontend and API runtime for PatchPilot, built with React 19, TypeScript, Next.js, and Vinext.
 
 For the full product overview, architecture diagram, feature guide, and screenshots, see the [Root README](../README.md).

@@ -2,10 +2,18 @@
 
 > **Find your next open-source mission, investigate source code with verifiable evidence, and prepare high-impact pull requests.**
 
-[![Tests](https://img.shields.io/badge/tests-40%20passed-brightgreen.svg)](tests)
+[![Live Site](https://img.shields.io/badge/Live%20Site-patchpiilot.netlify.app-c2f970?style=for-the-badge&logo=netlify&logoColor=black)](https://patchpiilot.netlify.app/)
+[![Demo Video](https://img.shields.io/badge/Demo%20Video-Watch%20Walkthrough-red?style=for-the-badge&logo=google-drive&logoColor=white)](https://drive.google.com/file/d/1OlccgJn44maRAvb5Gq9dyJnN43aesBPh/view?usp=sharing)
+
+[![Tests](https://img.shields.io/badge/tests-45%20passed-brightgreen.svg)](tests)
 [![Runtime](https://img.shields.io/badge/node-%3E%3D22.13.0-blue.svg)](https://nodejs.org)
 [![Framework](https://img.shields.io/badge/next.js-16%20%7C%20react%2019-black.svg)](https://nextjs.org)
 [![AI Engine](https://img.shields.io/badge/AI-Groq%20%7C%20OpenRouter%20%7C%20Anakin-orange.svg)](https://groq.com)
+
+---
+
+> 🚀 **Live Site:** [https://patchpiilot.netlify.app/](https://patchpiilot.netlify.app/)  
+> 🎬 **Demo Video:** [Watch on Google Drive](https://drive.google.com/file/d/1OlccgJn44maRAvb5Gq9dyJnN43aesBPh/view?usp=sharing)
 
 ---
 
