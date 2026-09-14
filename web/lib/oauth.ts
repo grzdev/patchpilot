@@ -197,8 +197,57 @@ export function getIdentity(request: Request) {
   );
 }
 
+export function isSameOrigin(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin) return false;
+
+  try {
+    const originUrl = new URL(origin);
+
+    // Direct match against request.url origin
+    const requestUrl = new URL(request.url);
+    if (originUrl.origin === requestUrl.origin) return true;
+
+    // Check forwarded headers from reverse proxies (Netlify, Vercel, Cloudflare, etc.)
+    const forwardedHost = (
+      request.headers.get("x-forwarded-host") ||
+      request.headers.get("host") ||
+      ""
+    ).split(",")[0].trim();
+
+    if (forwardedHost) {
+      const forwardedProto = (
+        request.headers.get("x-forwarded-proto") || ""
+      ).split(",")[0].trim();
+
+      const protoMatches =
+        originUrl.protocol === "https:" ||
+        originUrl.protocol === `${forwardedProto}:` ||
+        ["localhost", "127.0.0.1"].includes(originUrl.hostname);
+
+      if (originUrl.host === forwardedHost && protoMatches) {
+        return true;
+      }
+    }
+
+    // Check configured GITHUB_CALLBACK_URL origin
+    if (process.env.GITHUB_CALLBACK_URL) {
+      const cbOrigin = new URL(process.env.GITHUB_CALLBACK_URL).origin;
+      if (originUrl.origin === cbOrigin) return true;
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
 export function disconnectIdentity(request: Request) {
-  if(request.headers.get("origin") !== new URL(request.url).origin) return Response.json({error:"Use the disconnect button in PatchPilot."},{status:403});
+  if (!isSameOrigin(request))
+    return Response.json(
+      { error: "Use the disconnect button in PatchPilot." },
+      { status: 403 },
+    );
   const headers=new Headers({"Cache-Control":"no-store"});
   const secure=new URL(request.url).protocol === "https:";
   headers.append("Set-Cookie",cookie("pp_identity","",secure,0));

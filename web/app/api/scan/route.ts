@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getIdentity } from "@/lib/oauth";
+import { getIdentity, isSameOrigin } from "@/lib/oauth";
 import { scanRepository } from "@/lib/scanner";
 import { repoPath, GitHubError } from "@/lib/github";
 const input = z.object({
@@ -18,7 +18,7 @@ const limiter = createScanLimiter();
 export async function POST(request: Request) {
   let username: string | undefined;
   try {
-    if (request.headers.get("origin") !== new URL(request.url).origin) throw new GitHubError("Use the scan button from PatchPilot.",403,"PatchPilot");
+    if (!isSameOrigin(request)) throw new GitHubError("Use the scan button from PatchPilot.",403,"PatchPilot");
     const identity = await getIdentity(request).json() as {profile:{username:string}|null};
     username = identity.profile?.username;
     if (!username) throw new GitHubError("Sign in with GitHub before running a scan.",401,"PatchPilot");

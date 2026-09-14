@@ -91,6 +91,7 @@ test("disconnect clears identity and OAuth cookies and rejects cross-origin requ
   assert.equal(cookies.length,2);
   for(const name of ["pp_identity","pp_oauth"]) assert.ok(cookies.some(cookie=>cookie.startsWith(name+"=") && /Max-Age=0/.test(cookie) && /HttpOnly/.test(cookie) && /Secure/.test(cookie)));
   assert.equal(disconnectIdentity(new Request("https://patchpilot.test/api/auth/github/session",{method:"DELETE",headers:{origin:"https://other.test"}})).status,403);
+  assert.equal(disconnectIdentity(new Request("http://127.0.0.1:8888/api/auth/github/session",{method:"DELETE",headers:{origin:"https://patchpilot.netlify.app","x-forwarded-host":"patchpilot.netlify.app","x-forwarded-proto":"https"}})).status,200);
 });
 
 test("repository quota failure does not invalidate successful GitHub sign-in", async()=>{
