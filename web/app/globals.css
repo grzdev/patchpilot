@@ -1470,7 +1470,6 @@ a.secondary:hover {
 .personal-discovery-heading h1 { margin:10px 0 12px; font-size:clamp(26px,3vw,38px); }
 .personal-discovery-heading p { color:var(--muted-foreground); margin:0; }
 .personal-discovery-heading > button { flex-shrink:0; }
-.discovery-header-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; flex-shrink:0; }
 .discovery-filters-bar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
 .suggest-batch-btn { display:inline-flex; align-items:center; gap:8px; cursor:pointer; }
 .suggest-batch-btn:hover:not(:disabled) { border-color:#c2f970; color:#c2f970; }

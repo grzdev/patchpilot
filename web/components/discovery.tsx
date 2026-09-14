@@ -341,21 +341,9 @@ export function Discovery({
           </h1>
           <p>Explore public repositories or paste the one you want to inspect.</p>
         </div>
-        <div className="discovery-header-actions">
-          <button
-            type="button"
-            className="secondary suggest-batch-btn"
-            disabled={busy || retry > 0}
-            onClick={suggestNewBatch}
-            title="Suggest a new batch of repositories"
-          >
-            <Sparkles size={15} />
-            Suggest new batch
-          </button>
-          <button className="secondary" onClick={edit}>
-            {profiled ? "Edit preferences" : "Set up your profile"}
-          </button>
-        </div>
+        <button className="secondary" onClick={edit}>
+          {profiled ? "Edit preferences" : "Set up your profile"}
+        </button>
       </header>
 
       <form
