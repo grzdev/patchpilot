@@ -98,6 +98,25 @@ function RepoIcon({
   );
 }
 
+type DiscoveryCache = {
+  profileKey: string;
+  filterKey: string;
+  query: string;
+  submitted: string;
+  applied: {
+    category: string;
+    language: string;
+    activity: string;
+    size: string;
+    sort: string;
+  };
+  page: number;
+  items: Project[];
+  more: boolean;
+};
+
+let cachedDiscovery: DiscoveryCache | null = null;
+
 export function Discovery({
   profile,
   profiled = false,
@@ -109,34 +128,47 @@ export function Discovery({
   openProject: (p: Project) => void;
   edit: () => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [submitted, setSubmitted] = useState("");
-  const [category, setCategory] = useState("all");
-  const [language, setLanguage] = useState("all");
-  const [activity, setActivity] = useState("90");
-  const [size, setSize] = useState("all");
-  const [sort, setSort] = useState("suggested");
-  const [page, setPage] = useState(1);
-  const [items, setItems] = useState<Project[]>([]);
-  const [more, setMore] = useState(false);
+  const profileKey = JSON.stringify(profile);
+  const initialCache =
+    cachedDiscovery && cachedDiscovery.profileKey === profileKey
+      ? cachedDiscovery
+      : null;
+
+  const [query, setQuery] = useState(initialCache?.query ?? "");
+  const [submitted, setSubmitted] = useState(initialCache?.submitted ?? "");
+  const [category, setCategory] = useState(initialCache?.applied.category ?? "all");
+  const [language, setLanguage] = useState(initialCache?.applied.language ?? "all");
+  const [activity, setActivity] = useState(initialCache?.applied.activity ?? "90");
+  const [size, setSize] = useState(initialCache?.applied.size ?? "all");
+  const [sort, setSort] = useState(initialCache?.applied.sort ?? "suggested");
+  const [page, setPage] = useState(initialCache?.page ?? 1);
+  const [items, setItems] = useState<Project[]>(initialCache?.items ?? []);
+  const [more, setMore] = useState(initialCache?.more ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [applied, setApplied] = useState({
-    category: "all",
-    language: "all",
-    activity: "90",
-    size: "all",
-    sort: "suggested",
-  });
+  const [applied, setApplied] = useState(
+    initialCache?.applied ?? {
+      category: "all",
+      language: "all",
+      activity: "90",
+      size: "all",
+      sort: "suggested",
+    },
+  );
+
+  const forceRefreshRef = useRef(false);
 
   const pendingFilters =
     JSON.stringify({ category, language, activity, size, sort }) !==
     JSON.stringify(applied);
 
   function applyFilters() {
+    forceRefreshRef.current = true;
+    cachedDiscovery = null;
+    setItems([]);
     setApplied({ category, language, activity, size, sort });
     setSubmitted(query.trim());
     setPage(1);
@@ -144,6 +176,9 @@ export function Discovery({
   }
 
   function resetFilters() {
+    forceRefreshRef.current = true;
+    cachedDiscovery = null;
+    setItems([]);
     setCategory("all");
     setLanguage("all");
     setActivity("90");
@@ -162,6 +197,14 @@ export function Discovery({
     setRefresh((n) => n + 1);
   }
 
+  function suggestNewBatch() {
+    forceRefreshRef.current = true;
+    cachedDiscovery = null;
+    setItems([]);
+    setPage(1);
+    setRefresh((n) => n + 1);
+  }
+
   const openRef = useRef(openProject);
   useEffect(() => {
     openRef.current = openProject;
@@ -174,11 +217,21 @@ export function Discovery({
   }, [retry]);
 
   useEffect(() => {
+    const currentFilterKey = JSON.stringify({ submitted, applied, page });
+    if (
+      cachedDiscovery &&
+      cachedDiscovery.profileKey === profileKey &&
+      cachedDiscovery.filterKey === currentFilterKey &&
+      cachedDiscovery.items.length > 0 &&
+      !forceRefreshRef.current
+    ) {
+      return;
+    }
+
+    forceRefreshRef.current = false;
     const controller = new AbortController();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setBusy(true);
     setError("");
-    if (page === 1) setItems([]);
 
     fetch(
       "/api/github?" +
@@ -211,11 +264,23 @@ export function Discovery({
           applied.sort === "suggested"
             ? mixProjects(data.projects, profile)
             : data.projects;
-        setItems((old) =>
-          page === 1
-            ? batch
-            : [...old, ...batch.filter((p: Project) => !old.some((o) => o.repo === p.repo))],
-        );
+        setItems((old) => {
+          const nextItems =
+            page === 1
+              ? batch
+              : [...old, ...batch.filter((p: Project) => !old.some((o) => o.repo === p.repo))];
+          cachedDiscovery = {
+            profileKey,
+            filterKey: currentFilterKey,
+            query,
+            submitted,
+            applied,
+            page,
+            items: nextItems,
+            more: data.more,
+          };
+          return nextItems;
+        });
         setMore(data.more);
       })
       .catch((error) => {
@@ -226,7 +291,8 @@ export function Discovery({
       });
 
     return () => controller.abort();
-  }, [submitted, applied, page, refresh, profile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitted, applied, page, refresh, profile, profileKey]);
 
   async function choose(project: Project) {
     setBusy(true);
@@ -275,9 +341,21 @@ export function Discovery({
           </h1>
           <p>Explore public repositories or paste the one you want to inspect.</p>
         </div>
-        <button className="secondary" onClick={edit}>
-          {profiled ? "Edit preferences" : "Set up your profile"}
-        </button>
+        <div className="discovery-header-actions">
+          <button
+            type="button"
+            className="secondary suggest-batch-btn"
+            disabled={busy || retry > 0}
+            onClick={suggestNewBatch}
+            title="Suggest a new batch of repositories"
+          >
+            <Sparkles size={15} />
+            Suggest new batch
+          </button>
+          <button className="secondary" onClick={edit}>
+            {profiled ? "Edit preferences" : "Set up your profile"}
+          </button>
+        </div>
       </header>
 
       <form
@@ -302,23 +380,35 @@ export function Discovery({
       </form>
 
       <section className="discovery-filters">
-        <button
-          type="button"
-          className="filter-toggle secondary"
-          aria-expanded={filtersOpen}
-          aria-controls="repository-filters"
-          onClick={() => setFiltersOpen((value) => !value)}
-        >
-          <SlidersHorizontal size={15} />
-          <span>Refine repositories</span>
-          <ChevronDown
-            size={15}
-            className={`filter-chevron ${filtersOpen ? "rotate-180" : ""}`}
-          />
-          {pendingFilters && (
-            <span className="pending-filters-badge">Unapplied</span>
-          )}
-        </button>
+        <div className="discovery-filters-bar">
+          <button
+            type="button"
+            className="filter-toggle secondary"
+            aria-expanded={filtersOpen}
+            aria-controls="repository-filters"
+            onClick={() => setFiltersOpen((value) => !value)}
+          >
+            <SlidersHorizontal size={15} />
+            <span>Refine repositories</span>
+            <ChevronDown
+              size={15}
+              className={`filter-chevron ${filtersOpen ? "rotate-180" : ""}`}
+            />
+            {pendingFilters && (
+              <span className="pending-filters-badge">Unapplied</span>
+            )}
+          </button>
+          <button
+            type="button"
+            className="secondary suggest-batch-btn"
+            disabled={busy || retry > 0}
+            onClick={suggestNewBatch}
+            title="Suggest a new batch of repositories"
+          >
+            <Sparkles size={15} />
+            <span>Suggest new batch</span>
+          </button>
+        </div>
 
         {filtersOpen && (
           <div id="repository-filters" className="filters-container">
