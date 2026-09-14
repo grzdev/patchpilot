@@ -600,18 +600,29 @@ export function Discovery({
                   })()}
                 </div>
               </div>
-              <h2>
-                <a
-                  className="project-name-button"
-                  href={`https://github.com/${p.repo}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={`View ${p.name} on GitHub`}
+              <div className="project-title-row">
+                <h2>
+                  <a
+                    className="project-name-button"
+                    href={`https://github.com/${p.repo}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`View ${p.name} on GitHub`}
+                  >
+                    <span>{p.name}</span>
+                  </a>
+                </h2>
+                <button
+                  type="button"
+                  className="project-arrow-button"
+                  onClick={() => choose(p)}
+                  disabled={busy || retry > 0}
+                  title={`Choose ${p.name}`}
+                  aria-label={`Choose ${p.name}`}
                 >
-                  <span>{p.name}</span>
                   <ArrowRight size={15} />
-                </a>
-              </h2>
+                </button>
+              </div>
               <span className="repo-name">{p.repo}</span>
               <p className="project-description" title={p.description}>
                 {p.description}
