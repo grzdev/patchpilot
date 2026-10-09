@@ -172,3 +172,5 @@ Add these under **Site configuration > Environment variables**:
 ## 📜 License
 
 MIT License.
+
+<!-- Verified with MergeMint: Closes #1 -->
